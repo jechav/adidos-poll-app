@@ -1,6 +1,6 @@
 # I-003: API Framework & Routing
 
-**Status**: Ready for Implementation  
+**Status**: Done  
 **Epic**: Voting Infrastructure  
 **Priority**: P0 (Blocker)  
 **Estimated Effort**: 3 days
@@ -135,16 +135,16 @@ async def record_latency(request: Request, call_next):
 
 ## Acceptance Criteria
 
-- [ ] FastAPI server (uvicorn/gunicorn) initializes on port 3000 (configurable)
-- [ ] All 6 routes implemented and return expected HTTP status
-- [ ] Request/response logging in JSON format
-- [ ] Authentication dependency validates Adidos token (FastAPI `Depends`)
-- [ ] Error responses consistent (error envelope with code + message)
-- [ ] Latency metrics recorded (P95, P99 per endpoint)
-- [ ] All handlers are async (async def, native asyncio)
-- [ ] Request size limits enforced (1MB max body)
-- [ ] All responses include request_id and timestamp
-- [ ] Health check endpoint: GET /health → 200 OK
+- [x] FastAPI server (uvicorn/gunicorn) initializes on port 3000 (configurable)
+- [x] All 6 routes implemented and return expected HTTP status
+- [x] Request/response logging in JSON format
+- [x] Authentication dependency validates Adidos token (FastAPI `Depends`)
+- [x] Error responses consistent (error envelope with code + message)
+- [x] Latency metrics recorded (P95, P99 per endpoint)
+- [x] All handlers are async (async def, native asyncio)
+- [x] Request size limits enforced (1MB max body)
+- [x] All responses include request_id and timestamp
+- [x] Health check endpoint: GET /health → 200 OK
 
 ---
 
@@ -166,15 +166,15 @@ async def record_latency(request: Request, call_next):
 
 ## Implementation Checklist
 
-- [ ] Create `src/api/app.py` (FastAPI app setup)
-- [ ] Create `src/api/middleware/` (logging, error handling)
-- [ ] Create `src/api/routes/user.py` (GET /v1/polls, POST /v1/vote, GET /v1/user/votes) as an `APIRouter`
-- [ ] Create `src/api/routes/admin.py` (admin endpoints) as an `APIRouter`
-- [ ] Create `src/api/dependencies/auth.py` (token validation via FastAPI `Depends`)
-- [ ] Create `src/schemas/responses.py` (response envelope Pydantic models)
-- [ ] Create `src/metrics/latency.py` (P95/P99 recording)
-- [ ] Add exception handlers in `src/api/middleware/error_handler.py` (FastAPI `exception_handler`)
-- [ ] Test with curl/Postman
+- [x] Create `src/api/app.py` (FastAPI app setup)
+- [x] Create `src/api/middleware/` (logging, error handling)
+- [x] Create `src/api/routes/user.py` (GET /v1/polls, POST /v1/vote, GET /v1/user/votes) as an `APIRouter`
+- [x] Create `src/api/routes/admin.py` (admin endpoints) as an `APIRouter`
+- [x] Create `src/api/dependencies/auth.py` (token validation via FastAPI `Depends`)
+- [x] Create `src/schemas/responses.py` (response envelope Pydantic models)
+- [x] Create `src/metrics/latency.py` (P95/P99 recording)
+- [x] Add exception handlers in `src/api/middleware/error_handler.py` (FastAPI `exception_handler`)
+- [x] Test with curl/Postman
 
 ---
 

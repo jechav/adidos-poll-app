@@ -8,7 +8,7 @@
 ### Phase 1: Foundation (Weeks 1-2)
 - [x] [I-001: Database Schema & Migrations](./I-001-database-schema.md)
 - [x] [I-002: Redis Cluster Setup](./I-002-redis-cluster.md)
-- [ ] [I-003: API Framework & Routing](./I-003-api-framework.md)
+- [x] [I-003: API Framework & Routing](./I-003-api-framework.md)
 - [ ] [I-004: Authentication Middleware](./I-004-auth-middleware.md)
 
 ### Phase 2: Core Voting (Weeks 3-4)

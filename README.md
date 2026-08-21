@@ -79,11 +79,15 @@ Start with [SPECIFICATION.md](./SPECIFICATION.md) to understand problem, solutio
 
 ### 2. Set Up Local Environment
 ```bash
-docker-compose up -d  # PostgreSQL, Redis, etc.
+docker-compose up -d  # PostgreSQL, Redis cluster, etc.
 pip install -r requirements.txt
-alembic upgrade head   # Apply schema
-python scripts/seed/seed.py  # Populate test data
+psql "$DATABASE_URL" -f scripts/migrations/001_initial_schema.sql
+psql "$DATABASE_URL" -f scripts/migrations/002_anonymization_90days.sql
+psql "$DATABASE_URL" -f scripts/seed/polls_and_votes.sql  # Populate test data
 ```
+
+See [docs/setup/sharding.md](./docs/setup/sharding.md) and
+[docs/setup/redis-cluster.md](./docs/setup/redis-cluster.md) for details.
 
 ### 3. Implement Feature by Feature
 Issues are tracked in [docs/issues/](./docs/issues/). Pick an issue, implement, test, PR.

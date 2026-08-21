@@ -16,7 +16,7 @@ CREATE TABLE polls (
   activated_at TIMESTAMP,
   closed_at TIMESTAMP,
   archived_at TIMESTAMP,
-  CHECK (question IS NOT NULL AND length(question) > 0)
+  CHECK (length(question) > 0)
 );
 
 CREATE TABLE answers (
@@ -25,7 +25,7 @@ CREATE TABLE answers (
   answer_text VARCHAR(255) NOT NULL,
   "order" INT NOT NULL CHECK ("order" IN (0, 1)),
   UNIQUE(poll_id, "order"),
-  CHECK (answer_text IS NOT NULL AND length(answer_text) > 0)
+  CHECK (length(answer_text) > 0)
 );
 
 -- Sharded by user_id: only the votes cast by users hashed to this shard

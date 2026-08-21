@@ -51,7 +51,7 @@ adidos-poll-app/
 │   ├── architecture/        # Diagrams, decision records
 │   └── runbooks/            # Incident response guides
 ├── src/
-│   ├── api/                 # Express.js REST endpoints
+│   ├── api/                 # FastAPI REST endpoints
 │   ├── queue/               # Redis queue producer/consumer
 │   ├── db/                  # PostgreSQL connections, shard routing
 │   ├── cache/               # Redis cache layer
@@ -78,9 +78,9 @@ Start with [SPECIFICATION.md](./SPECIFICATION.md) to understand problem, solutio
 ### 2. Set Up Local Environment
 ```bash
 docker-compose up -d  # PostgreSQL, Redis, etc.
-npm install
-npm run migrate       # Apply schema
-npm run seed          # Populate test data
+pip install -r requirements.txt
+alembic upgrade head   # Apply schema
+python scripts/seed/seed.py  # Populate test data
 ```
 
 ### 3. Implement Feature by Feature
@@ -88,9 +88,9 @@ Issues are tracked in [docs/issues/](./docs/issues/). Pick an issue, implement, 
 
 ### 4. Test Before Pushing
 ```bash
-npm run test:unit       # Unit tests
-npm run test:integration # Integration tests
-npm run test:load       # Load tests (optional, pre-launch)
+pytest tests/unit             # Unit tests
+pytest tests/integration      # Integration tests
+locust -f tests/load/locustfile.py  # Load tests (optional, pre-launch)
 ```
 
 ## Key Metrics & Monitoring
@@ -134,7 +134,7 @@ See [SPECIFICATION.md → Deployment Checklist](./SPECIFICATION.md#deployment-ch
 ## Contributing
 
 ### Code Style
-- JavaScript/TypeScript: ESLint + Prettier
+- Python: Ruff + Black
 - Database: Migrations tracked in version control
 - Tests: 100% coverage for business logic (external behavior, not implementation details)
 

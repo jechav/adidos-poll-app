@@ -22,7 +22,7 @@
 ## Architecture (Grilled Through 49 Questions)
 
 ### Stack
-- **API**: Express.js (Node.js)
+- **API**: FastAPI (Python)
 - **Queue**: Redis list (LPUSH/RPOP)
 - **Cache**: Redis Cluster (3+ nodes)
 - **Database**: PostgreSQL sharded by user_id (8+ nodes)
@@ -105,7 +105,7 @@ User Sees Results
   - Persistence configured
   
 - [ ] **I-003: API Framework & Routing** (3 days, DEPENDS on I-001)
-  - Express.js setup
+  - FastAPI setup
   - Route handlers
   - Response envelopes
   
@@ -234,7 +234,7 @@ Total: ~37 days (8.5 weeks)
 - Architecture overview (30 min)
 
 ### 2. Understand the Stack
-- Express.js (Node.js)
+- FastAPI (Python)
 - Redis Cluster (caching + queue)
 - PostgreSQL sharding (write scaling)
 - Kubernetes (deployment)

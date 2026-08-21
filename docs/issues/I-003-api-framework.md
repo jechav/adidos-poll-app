@@ -26,8 +26,8 @@ The framework must:
 
 ## Solution
 
-Use **Express.js** (Node.js) for the API server. Set up:
-1. Express app with middleware stack (logging, parsing, error handling)
+Use **FastAPI** (Python) for the API server. Set up:
+1. FastAPI app with middleware stack (logging, parsing, error handling)
 2. Route handlers for all endpoints (grouped by user vs. admin)
 3. Consistent response envelopes (success, error, metadata)
 4. Request/response logging (JSON format, 1-in-1000 sampling)
@@ -119,29 +119,29 @@ GET  /v1/admin/anomalies          # View bot alerts (admin only)
 
 ### Latency Instrumentation
 
-```typescript
-// Record latency histogram per endpoint
-app.use((req, res, next) => {
-  const startTime = Date.now();
-  res.on('finish', () => {
-    const latency = Date.now() - startTime;
-    metrics.recordLatency(req.route.path, latency);
-  });
-  next();
-});
+```python
+# Record latency histogram per endpoint
+@app.middleware("http")
+async def record_latency(request: Request, call_next):
+    start_time = time.monotonic()
+    response = await call_next(request)
+    latency_ms = (time.monotonic() - start_time) * 1000
+    route = request.scope.get("route")
+    metrics.record_latency(route.path if route else request.url.path, latency_ms)
+    return response
 ```
 
 ---
 
 ## Acceptance Criteria
 
-- [ ] Express.js server initializes on port 3000 (configurable)
+- [ ] FastAPI server (uvicorn/gunicorn) initializes on port 3000 (configurable)
 - [ ] All 6 routes implemented and return expected HTTP status
 - [ ] Request/response logging in JSON format
-- [ ] Authentication middleware validates Adidos token
+- [ ] Authentication dependency validates Adidos token (FastAPI `Depends`)
 - [ ] Error responses consistent (error envelope with code + message)
 - [ ] Latency metrics recorded (P95, P99 per endpoint)
-- [ ] All handlers are async (return Promise)
+- [ ] All handlers are async (async def, native asyncio)
 - [ ] Request size limits enforced (1MB max body)
 - [ ] All responses include request_id and timestamp
 - [ ] Health check endpoint: GET /health → 200 OK
@@ -166,14 +166,14 @@ app.use((req, res, next) => {
 
 ## Implementation Checklist
 
-- [ ] Create `src/api/app.ts` (Express app setup)
-- [ ] Create `src/api/middleware/` (auth, logging, error handling)
-- [ ] Create `src/api/routes/user.ts` (GET /v1/polls, POST /v1/vote, GET /v1/user/votes)
-- [ ] Create `src/api/routes/admin.ts` (admin endpoints)
-- [ ] Create `src/api/middleware/auth.ts` (token validation)
-- [ ] Create `src/types/responses.ts` (response envelope types)
-- [ ] Create `src/metrics/latency.ts` (P95/P99 recording)
-- [ ] Add error handling middleware in `src/api/middleware/errorHandler.ts`
+- [ ] Create `src/api/app.py` (FastAPI app setup)
+- [ ] Create `src/api/middleware/` (logging, error handling)
+- [ ] Create `src/api/routes/user.py` (GET /v1/polls, POST /v1/vote, GET /v1/user/votes) as an `APIRouter`
+- [ ] Create `src/api/routes/admin.py` (admin endpoints) as an `APIRouter`
+- [ ] Create `src/api/dependencies/auth.py` (token validation via FastAPI `Depends`)
+- [ ] Create `src/schemas/responses.py` (response envelope Pydantic models)
+- [ ] Create `src/metrics/latency.py` (P95/P99 recording)
+- [ ] Add exception handlers in `src/api/middleware/error_handler.py` (FastAPI `exception_handler`)
 - [ ] Test with curl/Postman
 
 ---

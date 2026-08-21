@@ -1,0 +1,597 @@
+<title>Poll App Roadmap</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+<style>
+  :root {
+    --paper: #f5f4f0;
+    --surface: #ffffff;
+    --surface-2: #fbfaf7;
+    --ink: #1b1f27;
+    --ink-muted: #5c6270;
+    --ink-faint: #9498a3;
+    --line: #e1dfd9;
+    --line-strong: #cfccc4;
+    --accent: #2955d1;
+    --accent-soft: #e8edfc;
+    --done: #2f8f5b;
+    --done-soft: #e3f3e9;
+    --pending: #b7bac2;
+    --epic-1: #2955d1;
+    --epic-2: #0f8b7f;
+    --epic-3: #b8860b;
+    --epic-4: #6b4fa0;
+    --shadow: 0 1px 2px rgba(27,31,39,0.04), 0 6px 16px rgba(27,31,39,0.06);
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --paper: #0f1218;
+      --surface: #161a22;
+      --surface-2: #1b2029;
+      --ink: #e9eaed;
+      --ink-muted: #9aa0ad;
+      --ink-faint: #6b7180;
+      --line: #272c37;
+      --line-strong: #363c49;
+      --accent: #7089ff;
+      --accent-soft: #1c2440;
+      --done: #4fbf83;
+      --done-soft: #16301f;
+      --pending: #454b58;
+      --epic-1: #7089ff;
+      --epic-2: #35c9ba;
+      --epic-3: #e0ab3c;
+      --epic-4: #a98be0;
+      --shadow: 0 1px 2px rgba(0,0,0,0.3), 0 8px 24px rgba(0,0,0,0.35);
+    }
+  }
+
+  :root[data-theme="dark"] {
+    --paper: #0f1218;
+    --surface: #161a22;
+    --surface-2: #1b2029;
+    --ink: #e9eaed;
+    --ink-muted: #9aa0ad;
+    --ink-faint: #6b7180;
+    --line: #272c37;
+    --line-strong: #363c49;
+    --accent: #7089ff;
+    --accent-soft: #1c2440;
+    --done: #4fbf83;
+    --done-soft: #16301f;
+    --pending: #454b58;
+    --epic-1: #7089ff;
+    --epic-2: #35c9ba;
+    --epic-3: #e0ab3c;
+    --epic-4: #a98be0;
+    --shadow: 0 1px 2px rgba(0,0,0,0.3), 0 8px 24px rgba(0,0,0,0.35);
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    background: var(--paper);
+    color: var(--ink);
+    font-family: "IBM Plex Sans", -apple-system, "Segoe UI", sans-serif;
+    padding: clamp(20px, 4vw, 56px);
+    display: flex;
+    justify-content: center;
+  }
+
+  .page {
+    width: 100%;
+    max-width: 1180px;
+    display: flex;
+    flex-direction: column;
+    gap: 36px;
+  }
+
+  .mono {
+    font-family: "IBM Plex Mono", ui-monospace, SFMono-Regular, monospace;
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* ---------- Header ---------- */
+
+  header {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    align-items: flex-end;
+    gap: 24px;
+    border-bottom: 1px solid var(--line);
+    padding-bottom: 24px;
+  }
+
+  .eyebrow {
+    font-family: "IBM Plex Mono", monospace;
+    font-size: 12px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--accent);
+    font-weight: 600;
+    margin: 0 0 10px;
+  }
+
+  h1 {
+    font-size: clamp(28px, 3.4vw, 38px);
+    font-weight: 700;
+    margin: 0 0 8px;
+    letter-spacing: -0.01em;
+    text-wrap: balance;
+  }
+
+  header p.sub {
+    margin: 0;
+    color: var(--ink-muted);
+    font-size: 15px;
+    max-width: 52ch;
+  }
+
+  .headline-stat {
+    text-align: right;
+    flex-shrink: 0;
+  }
+
+  .headline-stat .big {
+    font-family: "IBM Plex Mono", monospace;
+    font-size: 40px;
+    font-weight: 600;
+    line-height: 1;
+    color: var(--ink);
+  }
+
+  .headline-stat .big span {
+    color: var(--ink-faint);
+    font-size: 22px;
+  }
+
+  .headline-stat .label {
+    margin-top: 6px;
+    font-size: 12px;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--ink-muted);
+  }
+
+  /* ---------- Timeline rail ---------- */
+
+  .rail-section {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .rail-section .rail-caption {
+    display: flex;
+    justify-content: space-between;
+    font-size: 12px;
+    color: var(--ink-faint);
+    font-family: "IBM Plex Mono", monospace;
+    letter-spacing: 0.04em;
+  }
+
+  .rail {
+    position: relative;
+    display: grid;
+    grid-template-columns: repeat(6, 1fr);
+    gap: 3px;
+    height: 34px;
+  }
+
+  .rail-seg {
+    position: relative;
+    background: var(--surface-2);
+    border: 1px solid var(--line);
+    border-radius: 4px;
+    overflow: hidden;
+  }
+
+  .rail-fill {
+    position: absolute;
+    inset: 0;
+    background: var(--done);
+    width: var(--pct, 0%);
+    transition: width 0.4s ease;
+  }
+
+  .rail-seg .rail-label {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-family: "IBM Plex Mono", monospace;
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--ink-muted);
+    z-index: 1;
+    mix-blend-mode: normal;
+  }
+
+  /* ---------- Phase grid ---------- */
+
+  .phases {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(270px, 1fr));
+    gap: 18px;
+  }
+
+  .phase {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    box-shadow: var(--shadow);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  .phase-head {
+    padding: 16px 18px 14px;
+    border-bottom: 1px solid var(--line);
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  .phase-head .top-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: 10px;
+  }
+
+  .phase-num {
+    font-family: "IBM Plex Mono", monospace;
+    font-size: 12px;
+    color: var(--ink-faint);
+    letter-spacing: 0.08em;
+  }
+
+  .phase-weeks {
+    font-family: "IBM Plex Mono", monospace;
+    font-size: 11px;
+    color: var(--ink-faint);
+  }
+
+  .phase-title {
+    font-size: 16.5px;
+    font-weight: 600;
+    margin: 0;
+    letter-spacing: -0.005em;
+  }
+
+  .phase-progress-track {
+    height: 4px;
+    border-radius: 2px;
+    background: var(--pending);
+    opacity: 0.35;
+    overflow: hidden;
+    margin-top: 4px;
+  }
+
+  .phase-progress-fill {
+    height: 100%;
+    background: var(--done);
+    width: var(--pct, 0%);
+  }
+
+  .issues {
+    list-style: none;
+    margin: 0;
+    padding: 6px 8px;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .issue {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    padding: 9px 10px;
+    border-radius: 7px;
+  }
+
+  .issue:hover {
+    background: var(--surface-2);
+  }
+
+  .mark {
+    flex-shrink: 0;
+    width: 17px;
+    height: 17px;
+    border-radius: 5px;
+    margin-top: 1px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .mark.done {
+    background: var(--done);
+  }
+
+  .mark.done::after {
+    content: "";
+    width: 8px;
+    height: 5px;
+    border-left: 2px solid #fff;
+    border-bottom: 2px solid #fff;
+    transform: rotate(-45deg) translate(0.5px, -1px);
+  }
+
+  .mark.pending {
+    border: 1.5px solid var(--line-strong);
+    background: transparent;
+  }
+
+  .issue-body {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+  }
+
+  .issue-id {
+    font-family: "IBM Plex Mono", monospace;
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--ink-faint);
+  }
+
+  .issue-title {
+    font-size: 13.5px;
+    color: var(--ink);
+    line-height: 1.35;
+  }
+
+  .issue.done .issue-title {
+    color: var(--ink-muted);
+  }
+
+  .epic-dot {
+    display: inline-block;
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    margin-right: 6px;
+    position: relative;
+    top: -1px;
+  }
+
+  .phase-foot {
+    margin-top: auto;
+    padding: 10px 18px 14px;
+    display: flex;
+    justify-content: space-between;
+    font-family: "IBM Plex Mono", monospace;
+    font-size: 11px;
+    color: var(--ink-faint);
+    border-top: 1px solid var(--line);
+  }
+
+  /* ---------- Footer: legend + backlog ---------- */
+
+  footer {
+    display: grid;
+    grid-template-columns: 1.3fr 1fr;
+    gap: 24px;
+    border-top: 1px solid var(--line);
+    padding-top: 28px;
+  }
+
+  @media (max-width: 720px) {
+    footer { grid-template-columns: 1fr; }
+    header { flex-direction: column; align-items: flex-start; }
+    .headline-stat { text-align: left; }
+  }
+
+  .panel-title {
+    font-size: 12px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--ink-faint);
+    font-weight: 600;
+    margin: 0 0 12px;
+  }
+
+  .legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px 20px;
+  }
+
+  .legend-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 13px;
+    color: var(--ink-muted);
+  }
+
+  .legend-item .swatch {
+    width: 9px;
+    height: 9px;
+    border-radius: 50%;
+  }
+
+  .backlog {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .backlog li {
+    font-size: 13.5px;
+    color: var(--ink-muted);
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+  }
+
+  .backlog li::before {
+    content: "\2013";
+    color: var(--ink-faint);
+  }
+</style>
+
+<div class="page">
+
+  <header>
+    <div>
+      <p class="eyebrow">Epic 1&ndash;4 &middot; Adidos Poll App</p>
+      <h1>Build Roadmap</h1>
+      <p class="sub">Twenty-four tickets across six phases, taking the voting service from schema to launch checklist.</p>
+    </div>
+    <div class="headline-stat">
+      <div class="big mono">3<span>/24</span></div>
+      <div class="label">Tickets Done</div>
+    </div>
+  </header>
+
+  <div class="rail-section">
+    <div class="rail-caption">
+      <span>WEEK 1</span>
+      <span>WEEK 12</span>
+    </div>
+    <div class="rail">
+      <div class="rail-seg"><div class="rail-fill" style="--pct:75%"></div><span class="rail-label">P1 &middot; 3/4</span></div>
+      <div class="rail-seg"><div class="rail-fill" style="--pct:0%"></div><span class="rail-label">P2 &middot; 0/4</span></div>
+      <div class="rail-seg"><div class="rail-fill" style="--pct:0%"></div><span class="rail-label">P3 &middot; 0/4</span></div>
+      <div class="rail-seg"><div class="rail-fill" style="--pct:0%"></div><span class="rail-label">P4 &middot; 0/4</span></div>
+      <div class="rail-seg"><div class="rail-fill" style="--pct:0%"></div><span class="rail-label">P5 &middot; 0/4</span></div>
+      <div class="rail-seg"><div class="rail-fill" style="--pct:0%"></div><span class="rail-label">P6 &middot; 0/4</span></div>
+    </div>
+  </div>
+
+  <div class="phases" id="phases"></div>
+
+  <footer>
+    <div>
+      <p class="panel-title">Epics</p>
+      <div class="legend">
+        <div class="legend-item"><span class="swatch" style="background:var(--epic-1)"></span>Voting Infrastructure &middot; I-001&ndash;009</div>
+        <div class="legend-item"><span class="swatch" style="background:var(--epic-2)"></span>Result Aggregation &amp; Caching &middot; I-009&ndash;012</div>
+        <div class="legend-item"><span class="swatch" style="background:var(--epic-3)"></span>Admin &amp; Security &middot; I-013&ndash;016</div>
+        <div class="legend-item"><span class="swatch" style="background:var(--epic-4)"></span>Observability &amp; Launch &middot; I-017&ndash;024</div>
+      </div>
+    </div>
+    <div>
+      <p class="panel-title">Backlog &middot; Post-MVP</p>
+      <ul class="backlog">
+        <li>Multi-language support (i18n)</li>
+        <li>Rich media (images, links)</li>
+        <li>Anonymous voting mode</li>
+        <li>Scheduled poll activation</li>
+        <li>Advanced analytics dashboards</li>
+        <li>Webhook events to Adidos</li>
+        <li>A/B testing (randomize questions/answers)</li>
+      </ul>
+    </div>
+  </footer>
+
+</div>
+
+<script>
+  const PHASES = [
+    {
+      num: "Phase 1", weeks: "Weeks 1–2", title: "Foundation",
+      issues: [
+        { id: "I-001", title: "Database Schema & Migrations", done: true, epic: 1 },
+        { id: "I-002", title: "Redis Cluster Setup", done: true, epic: 1 },
+        { id: "I-003", title: "API Framework & Routing", done: true, epic: 1 },
+        { id: "I-004", title: "Authentication Middleware", done: false, epic: 1 },
+      ],
+    },
+    {
+      num: "Phase 2", weeks: "Weeks 3–4", title: "Core Voting",
+      issues: [
+        { id: "I-005", title: "Vote Acceptance & Queueing", done: false, epic: 1 },
+        { id: "I-006", title: "Uniqueness Enforcement (Redis + DB)", done: false, epic: 1 },
+        { id: "I-007", title: "Rate Limiting (Per-User, Per-IP)", done: false, epic: 1 },
+        { id: "I-008", title: "Vote Processor Workers", done: false, epic: 1 },
+      ],
+    },
+    {
+      num: "Phase 3", weeks: "Weeks 5–6", title: "Results & Caching",
+      issues: [
+        { id: "I-009", title: "Result Aggregation (Redis Cache)", done: false, epic: 1 },
+        { id: "I-010", title: "Materialized Views (Fallback)", done: false, epic: 2 },
+        { id: "I-011", title: "GET /v1/polls Endpoint", done: false, epic: 2 },
+        { id: "I-012", title: "GET /v1/user/votes Endpoint", done: false, epic: 2 },
+      ],
+    },
+    {
+      num: "Phase 4", weeks: "Weeks 7–8", title: "Admin & Bot Defense",
+      issues: [
+        { id: "I-013", title: "Admin Poll Management Endpoints", done: false, epic: 3 },
+        { id: "I-014", title: "Bot Detection & Alerting", done: false, epic: 3 },
+        { id: "I-015", title: "Duplicate Detection (3-Strike Block)", done: false, epic: 3 },
+        { id: "I-016", title: "Anomaly Reporting to Adidos", done: false, epic: 3 },
+      ],
+    },
+    {
+      num: "Phase 5", weeks: "Weeks 9–10", title: "Observability",
+      issues: [
+        { id: "I-017", title: "Metrics & Monitoring (Prometheus)", done: false, epic: 4 },
+        { id: "I-018", title: "Structured Logging (JSON + Sampling)", done: false, epic: 4 },
+        { id: "I-019", title: "Alerting & Dashboards (Grafana)", done: false, epic: 4 },
+        { id: "I-020", title: "Incident Runbooks", done: false, epic: 4 },
+      ],
+    },
+    {
+      num: "Phase 6", weeks: "Weeks 11–12", title: "Testing & Launch",
+      issues: [
+        { id: "I-021", title: "Unit Tests (Vote, Rate Limit, Uniqueness)", done: false, epic: 4 },
+        { id: "I-022", title: "Integration Tests (End-to-End Workflows)", done: false, epic: 4 },
+        { id: "I-023", title: "Load Tests (5x Peak: 100K votes/sec)", done: false, epic: 4 },
+        { id: "I-024", title: "Pre-Launch Checklist", done: false, epic: 4 },
+      ],
+    },
+  ];
+
+  const epicVar = { 1: "--epic-1", 2: "--epic-2", 3: "--epic-3", 4: "--epic-4" };
+
+  const root = document.getElementById("phases");
+
+  PHASES.forEach((phase) => {
+    const doneCount = phase.issues.filter((i) => i.done).length;
+    const pct = Math.round((doneCount / phase.issues.length) * 100);
+
+    const el = document.createElement("div");
+    el.className = "phase";
+    el.innerHTML = `
+      <div class="phase-head">
+        <div class="top-row">
+          <span class="phase-num">${phase.num}</span>
+          <span class="phase-weeks">${phase.weeks}</span>
+        </div>
+        <h2 class="phase-title">${phase.title}</h2>
+        <div class="phase-progress-track"><div class="phase-progress-fill" style="--pct:${pct}%"></div></div>
+      </div>
+      <ul class="issues">
+        ${phase.issues
+          .map(
+            (issue) => `
+          <li class="issue ${issue.done ? "done" : "pending"}">
+            <span class="mark ${issue.done ? "done" : "pending"}"></span>
+            <span class="issue-body">
+              <span class="issue-id">${issue.id}</span>
+              <span class="issue-title"><span class="epic-dot" style="background:var(${epicVar[issue.epic]})"></span>${issue.title}</span>
+            </span>
+          </li>`
+          )
+          .join("")}
+      </ul>
+      <div class="phase-foot">
+        <span>${doneCount}/${phase.issues.length} done</span>
+        <span>${pct}%</span>
+      </div>
+    `;
+    root.appendChild(el);
+  });
+</script>

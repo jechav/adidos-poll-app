@@ -1,6 +1,6 @@
 # I-001: Database Schema & Migrations
 
-**Status**: Ready for Implementation  
+**Status**: Implemented  
 **Epic**: Voting Infrastructure  
 **Priority**: P0 (Blocker)  
 **Estimated Effort**: 5 days
@@ -132,15 +132,15 @@ CREATE INDEX idx_anomalies_created ON anomalies(created_at DESC);
 
 ## Acceptance Criteria
 
-- [ ] Schema created for 8 PostgreSQL shards
-- [ ] All tables have proper indexes (checked with `EXPLAIN ANALYZE`)
-- [ ] Foreign key constraints prevent orphaned votes
-- [ ] Uniqueness constraint on (user_id, poll_id) enforced per shard
-- [ ] Anonymization migration script created (clears user_id after 90 days)
-- [ ] Test data seed script creates 100K votes
-- [ ] All migrations stored in `scripts/migrations/` directory
-- [ ] README updated with schema diagram and ER model
-- [ ] Performance validated: 1000 votes/sec write throughput on single shard
+- [x] Schema created for 8 PostgreSQL shards
+- [x] All tables have proper indexes (checked with `EXPLAIN ANALYZE`)
+- [x] Foreign key constraints prevent orphaned votes
+- [x] Uniqueness constraint on (user_id, poll_id) enforced per shard
+- [x] Anonymization migration script created (clears user_id after 90 days)
+- [x] Test data seed script creates 100K votes
+- [x] All migrations stored in `scripts/migrations/` directory
+- [x] README updated with schema diagram and ER model
+- [x] Performance validated: 1000 votes/sec write throughput on single shard
 
 ---
 
@@ -171,14 +171,14 @@ CREATE INDEX idx_anomalies_created ON anomalies(created_at DESC);
 
 ## Implementation Checklist
 
-- [ ] Create `scripts/schema/polls.sql` (core tables)
-- [ ] Create `scripts/schema/indexes.sql` (indexes)
-- [ ] Create `scripts/migrations/001_initial_schema.sql`
-- [ ] Create `scripts/migrations/002_anonymization_90days.sql`
-- [ ] Create `scripts/seed/polls_and_votes.sql` (test data)
-- [ ] Add schema diagram to `docs/architecture/schema.md`
-- [ ] Document shard provisioning in `docs/setup/sharding.md`
-- [ ] Test locally with Docker PostgreSQL container
+- [x] Create `scripts/schema/polls.sql` (core tables)
+- [x] Create `scripts/schema/indexes.sql` (indexes)
+- [x] Create `scripts/migrations/001_initial_schema.sql`
+- [x] Create `scripts/migrations/002_anonymization_90days.sql`
+- [x] Create `scripts/seed/polls_and_votes.sql` (test data)
+- [x] Add schema diagram to `docs/architecture/schema.md`
+- [x] Document shard provisioning in `docs/setup/sharding.md`
+- [x] Test locally with Docker PostgreSQL container
 
 ---
 

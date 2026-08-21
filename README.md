@@ -7,6 +7,8 @@ A **real-time binary polling microservice** designed to absorb 1M+ votes with in
 - **Domain Model**: See [DOMAIN_MODEL.md](./DOMAIN_MODEL.md)
 - **Technical Specification**: See [SPECIFICATION.md](./SPECIFICATION.md)
 - **Issues & Tickets**: See [.github/issues/](./docs/issues/)
+- **Database Schema & ER Diagram**: See [docs/architecture/schema.md](./docs/architecture/schema.md)
+- **Redis Key Namespace**: See [docs/architecture/redis-keys.md](./docs/architecture/redis-keys.md)
 
 ## Architecture at a Glance
 

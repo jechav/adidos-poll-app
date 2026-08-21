@@ -1,6 +1,6 @@
 # I-002: Redis Cluster Setup
 
-**Status**: Ready for Implementation
+**Status**: Implemented
 **Epic**: Voting Infrastructure
 **Priority**: P0 (Blocker, parallel with I-001)
 **Estimated Effort**: 3 days
@@ -188,15 +188,15 @@ async def redis_health() -> dict:
 
 ## Acceptance Criteria
 
-- [ ] Redis Cluster running with 3+ master nodes (`CLUSTER INFO` reports `cluster_state:ok`)
-- [ ] AOF and RDB persistence both enabled and verified (restart a node, confirm data present)
-- [ ] Key namespace table (above) documented in `docs/architecture/redis-keys.md` and treated as the canonical reference for I-004 through I-015
-- [ ] `docker-compose` brings up a working 3-node cluster locally with a single command
-- [ ] Shared async connection pool (`src/cache/redis_client.py`) importable by any future module
-- [ ] `GET /health` reports Redis cluster status (`ok` / `degraded`)
-- [ ] Killing one node (`docker stop`) does not take the whole cluster down; other slots remain writable
-- [ ] Connection pool survives a node failover without requiring app restart (verified with a scripted test)
-- [ ] No API routes, Pydantic schemas, or business logic included in this issue — verified by review
+- [x] Redis Cluster running with 3+ master nodes (`CLUSTER INFO` reports `cluster_state:ok`)
+- [x] AOF and RDB persistence both enabled and verified (restart a node, confirm data present)
+- [x] Key namespace table (above) documented in `docs/architecture/redis-keys.md` and treated as the canonical reference for I-004 through I-015
+- [x] `docker-compose` brings up a working 3-node cluster locally with a single command
+- [x] Shared async connection pool (`src/cache/redis_client.py`) importable by any future module
+- [x] `GET /health` reports Redis cluster status (`ok` / `degraded`)
+- [x] Killing one node (`docker stop`) does not take the whole cluster down; other slots remain writable
+- [x] Connection pool survives a node failover without requiring app restart (verified with a scripted test)
+- [x] No API routes, Pydantic schemas, or business logic included in this issue — verified by review
 
 ---
 
@@ -232,14 +232,14 @@ async def redis_health() -> dict:
 
 ## Implementation Checklist
 
-- [ ] Create `scripts/redis/redis.conf` (cluster mode, AOF + RDB config)
-- [ ] Create `docker-compose.yml` Redis service definitions (3 nodes + cluster-init)
-- [ ] Create `src/cache/redis_client.py` (async `RedisCluster` client, pooled, FastAPI dependency)
-- [ ] Create `src/cache/health.py` (`redis_health()` contribution to `/health`)
-- [ ] Document key namespace table in `docs/architecture/redis-keys.md`
-- [ ] Document local cluster bring-up in `docs/setup/redis-cluster.md`
-- [ ] Test node failure locally (`docker stop` one node, confirm cluster + client behavior)
-- [ ] Test AOF persistence (restart a node, confirm queued data present)
+- [x] Create `scripts/redis/redis.conf` (cluster mode, AOF + RDB config)
+- [x] Create `docker-compose.yml` Redis service definitions (3 nodes + cluster-init)
+- [x] Create `src/cache/redis_client.py` (async `RedisCluster` client, pooled, FastAPI dependency)
+- [x] Create `src/cache/health.py` (`redis_health()` contribution to `/health`)
+- [x] Document key namespace table in `docs/architecture/redis-keys.md`
+- [x] Document local cluster bring-up in `docs/setup/redis-cluster.md`
+- [x] Test node failure locally (`docker stop` one node, confirm cluster + client behavior)
+- [x] Test AOF persistence (restart a node, confirm queued data present)
 
 ---
 

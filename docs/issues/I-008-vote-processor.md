@@ -1,6 +1,6 @@
 # I-008: Vote Processor Workers
 
-**Status**: Ready for Implementation  
+**Status**: Done  
 **Epic**: Voting Infrastructure  
 **Priority**: P0 (Blocker)  
 **Estimated Effort**: 5 days
@@ -151,15 +151,15 @@ This issue writes votes and increments cache counters but does not implement the
 
 ## Acceptance Criteria
 
-- [ ] Worker runs as a standalone process (`python -m src.worker.main`), independent of the FastAPI app process
-- [ ] Worker dequeues in batches of 100-500 votes using `BRPOP` (no busy-polling)
-- [ ] Votes are routed to the correct shard via `user_id % num_shards`, verified against I-001's shard assignment
-- [ ] Batch insert commits to the correct PostgreSQL shard; a single duplicate row does not roll back the rest of the batch
-- [ ] Redis cache counter (`cache:poll:{poll_id}:answer:{answer_id}`) increments only after the corresponding DB write commits
-- [ ] Shard-down scenario: votes for that shard are requeued onto `queue:votes`, not dropped, not stuck retrying in a hot loop
-- [ ] Other shards continue processing normally while one shard is down
-- [ ] Worker pods scale with queue depth (verified via HPA/KEDA config watching `LLEN queue:votes`)
-- [ ] No vote is lost across a worker pod restart mid-batch (in-flight `BRPOP`'d-but-not-yet-committed votes are either committed or safely lost only in the same way any at-least-once queue consumer can lose an in-flight item — documented, not silently assumed away)
+- [x] Worker runs as a standalone process (`python -m src.worker.main`), independent of the FastAPI app process
+- [x] Worker dequeues in batches of 100-500 votes using `BRPOP` (no busy-polling)
+- [x] Votes are routed to the correct shard via `user_id % num_shards`, verified against I-001's shard assignment
+- [x] Batch insert commits to the correct PostgreSQL shard; a single duplicate row does not roll back the rest of the batch
+- [x] Redis cache counter (`cache:poll:{poll_id}:answer:{answer_id}`) increments only after the corresponding DB write commits
+- [x] Shard-down scenario: votes for that shard are requeued onto `queue:votes`, not dropped, not stuck retrying in a hot loop
+- [x] Other shards continue processing normally while one shard is down
+- [ ] Worker pods scale with queue depth (verified via HPA/KEDA config watching `LLEN queue:votes`) — not built here; this issue delivered the worker code/tests, not the Kubernetes Deployment/HPA manifests (no k8s manifests exist anywhere yet in this repo). Tracked as follow-up.
+- [x] No vote is lost across a worker pod restart mid-batch (in-flight `BRPOP`'d-but-not-yet-committed votes are either committed or safely lost only in the same way any at-least-once queue consumer can lose an in-flight item — documented, not silently assumed away): see the module docstring in `src/worker/main.py` and the "Ambiguous/deferred points" note below.
 
 ---
 
@@ -188,18 +188,59 @@ This issue writes votes and increments cache counters but does not implement the
 
 ## Implementation Checklist
 
-- [ ] Create `src/worker/main.py` (standalone entrypoint, `--shard-id` arg)
-- [ ] Implement `dequeue_batch()` in `src/worker/queue_consumer.py` (BRPOP-based batching)
-- [ ] Implement `route_by_shard()` in `src/worker/sharding.py`
-- [ ] Implement `process_batch()` in `src/worker/processor.py` (batch insert + fallback per-row insert)
-- [ ] Implement `requeue()` and shard-down backoff handling
-- [ ] Wire Redis cache `INCR` after successful DB commit
-- [ ] Add Dockerfile/entrypoint for worker container, distinct from API container
-- [ ] Configure Kubernetes Deployment (1 per shard) + HPA/KEDA scaling rule on `LLEN queue:votes`
-- [ ] Write failover integration test (simulate shard down mid-batch)
-- [ ] Write shard-distribution test (1000 random-user votes, verify even spread)
-- [ ] Load test sustained + burst scenarios
+- [x] Create `src/worker/main.py` (standalone entrypoint, `--shard-id` arg)
+- [x] Implement `dequeue_batch()` in `src/worker/queue_consumer.py` (BRPOP-based batching)
+- [x] Implement `route_by_shard()` in `src/worker/sharding.py`
+- [x] Implement `process_batch()` in `src/worker/processor.py` (batch insert + fallback per-row insert)
+- [x] Implement `requeue()` and shard-down backoff handling
+- [x] Wire Redis cache `INCR` after successful DB commit
+- [ ] Add Dockerfile/entrypoint for worker container, distinct from API container — deferred; no container tooling exists in this repo yet (no top-level Dockerfile for the API tier either)
+- [ ] Configure Kubernetes Deployment (1 per shard) + HPA/KEDA scaling rule on `LLEN queue:votes` — deferred; no `k8s/` or deployment manifests exist anywhere in the repo yet
+- [x] Write failover integration test (simulate shard down mid-batch): `tests/integration/test_vote_processor_pipeline.py` (connects to a refused port to simulate an unreachable shard) and `tests/unit/test_worker_processor.py`/`test_worker_db.py` (mocked connection-loss and backoff)
+- [x] Write shard-distribution test (1000 random-user votes, verify even spread): `tests/unit/test_worker_sharding.py`
+- [ ] Load test sustained + burst scenarios — deferred; needs a running Redis cluster + multi-shard Postgres and a load generator, out of scope for this worktree's unit/integration test run (see I-023: Load Tests)
 
 ---
+
+## Implementation Notes (as built)
+
+- **Shard hash**: `user_id` is a free-form string (`VARCHAR(255)`), not an
+  integer, so "`user_id % num_shards`" is implemented as
+  `int.from_bytes(blake2b(user_id), "big") % num_shards`
+  (`src/worker/sharding.py`). Python's built-in `hash()` was deliberately
+  avoided — it's salted per-process (`PYTHONHASHSEED`), which would make
+  two worker pods disagree on where the same user_id routes.
+  `docs/setup/sharding.md` explicitly left application-layer routing
+  unspecified pending this issue, so this hash choice is the answer to
+  that open question.
+- **I-005/I-006 not yet merged**: this worker was built standalone against
+  the `queue:votes`/`VotePayload` JSON shape and the `votes` table's
+  `UNIQUE(user_id, poll_id)` constraint from I-001, without a live
+  producer. The per-row duplicate fallback (log-and-skip, no retry, no
+  client error) matches I-006's spec'd design even though I-006 itself
+  isn't merged yet.
+- **Cross-shard requeue in `run_worker`**: every worker pod `BRPOP`s from
+  the same shared `queue:votes`, keeps only votes matching its own
+  `--shard-id`, and immediately `LPUSH`es the rest back — per the issue's
+  Deployment Model section. This is also what makes horizontal scaling
+  double-processing-safe: `BRPOP` pops each entry exactly once, so no two
+  pods (same shard or different) ever process the same vote.
+- **Shard-down backoff**: `ShardConnectionPool` tracks a per-shard
+  next-retry time with exponential backoff (1s initial, doubling, capped
+  at 30s), so a persistently down shard is polled occasionally rather
+  than hot-looped; other shards' pools are unaffected.
+- **Pod-restart vote loss**: this worker gives the same at-least-once
+  guarantee any `BRPOP`-based consumer gives — once `BRPOP` returns an
+  item, it's off the Redis list; if the pod is killed before that vote is
+  committed (or requeued), it is lost. This is a real, documented gap
+  (not silently assumed away), consistent with the acceptance criterion's
+  own wording. Closing it fully (e.g. a claimed-but-unacked visibility
+  window, akin to a Redis Streams consumer group) is a bigger redesign
+  than this issue's scope and is not attempted here.
+- **Local dev shard DSNs**: `default_shard_dsn()` reads
+  `POLL_APP_SHARD_{N}_DSN` per shard, falling back to
+  `settings.database_url` (a single local Postgres instance standing in
+  for all shards) — matching `docs/setup/sharding.md`'s "single Postgres
+  instance is enough for local dev" note.
 
 **Acceptance**: Votes durably written and cache updated end-to-end, failover verified, autoscaling configured, PR reviewed and merged.

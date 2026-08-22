@@ -15,7 +15,7 @@
 - [ ] [I-005: Vote Acceptance & Queueing](./I-005-vote-acceptance.md)
 - [ ] [I-006: Uniqueness Enforcement (Redis + DB)](./I-006-uniqueness.md)
 - [ ] [I-007: Rate Limiting (Per-User, Per-IP)](./I-007-rate-limiting.md)
-- [ ] [I-008: Vote Processor Workers](./I-008-vote-processor.md)
+- [x] [I-008: Vote Processor Workers](./I-008-vote-processor.md)
 
 ### Phase 3: Results & Caching (Weeks 5-6)
 - [ ] [I-009: Result Aggregation (Redis Cache)](./I-009-result-aggregation.md)

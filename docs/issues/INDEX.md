@@ -18,7 +18,7 @@
 - [x] [I-008: Vote Processor Workers](./I-008-vote-processor.md)
 
 ### Phase 3: Results & Caching (Weeks 5-6)
-- [ ] [I-009: Result Aggregation (Redis Cache)](./I-009-result-aggregation.md)
+- [x] [I-009: Result Aggregation (Redis Cache)](./I-009-result-aggregation.md)
 - [ ] [I-010: Materialized Views (Fallback)](./I-010-materialized-views.md)
 - [ ] [I-011: GET /v1/polls Endpoint](./I-011-list-polls.md)
 - [ ] [I-012: GET /v1/user/votes Endpoint](./I-012-user-votes.md)

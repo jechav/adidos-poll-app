@@ -21,7 +21,7 @@
 - [x] [I-009: Result Aggregation (Redis Cache)](./I-009-result-aggregation.md)
 - [ ] [I-010: Materialized Views (Fallback)](./I-010-materialized-views.md)
 - [ ] [I-011: GET /v1/polls Endpoint](./I-011-list-polls.md)
-- [ ] [I-012: GET /v1/user/votes Endpoint](./I-012-user-votes.md)
+- [x] [I-012: GET /v1/user/votes Endpoint](./I-012-user-votes.md)
 
 ### Phase 4: Admin & Bot Defense (Weeks 7-8)
 - [ ] [I-013: Admin Poll Management Endpoints](./I-013-admin-endpoints.md)

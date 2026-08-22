@@ -1,6 +1,6 @@
 # I-004: Authentication Middleware
 
-**Status**: Ready for Implementation
+**Status**: Done
 **Epic**: Voting Infrastructure
 **Priority**: P0 (Blocker)
 **Estimated Effort**: 2 days
@@ -168,15 +168,15 @@ Both use the standard error envelope from I-003:
 
 ## Acceptance Criteria
 
-- [ ] `Depends(get_current_user)` extracts and validates token, returns `UserContext(user_id, role)`
-- [ ] `Depends(require_admin)` rejects non-admin users with 403, using the standard error envelope
-- [ ] Missing or malformed `Authorization` header returns 401 without any Redis lookup
-- [ ] Valid token on cache hit resolves from Redis (`auth:token:{token_hash}`) without decoding the token again
-- [ ] Valid token on cache miss is trusted (fail-open), decoded once, and cached with 5-10 min TTL
-- [ ] Token itself is never stored in Redis or logs — only its SHA-256 hash appears in the cache key
-- [ ] Revocation lag behavior is documented in this issue and cross-referenced against SPECIFICATION.md Known Risks
-- [ ] Both dependencies are usable on any route via standard `Depends()` injection, no per-route boilerplate
-- [ ] Error responses match I-003's error code table exactly (`UNAUTHORIZED` / 401, `FORBIDDEN` / 403)
+- [x] `Depends(get_current_user)` extracts and validates token, returns `UserContext(user_id, role)`
+- [x] `Depends(require_admin)` rejects non-admin users with 403, using the standard error envelope
+- [x] Missing or malformed `Authorization` header returns 401 without any Redis lookup
+- [x] Valid token on cache hit resolves from Redis (`auth:token:{token_hash}`) without decoding the token again
+- [x] Valid token on cache miss is trusted (fail-open), decoded once, and cached with 5-10 min TTL
+- [x] Token itself is never stored in Redis or logs — only its SHA-256 hash appears in the cache key
+- [x] Revocation lag behavior is documented in this issue and cross-referenced against SPECIFICATION.md Known Risks
+- [x] Both dependencies are usable on any route via standard `Depends()` injection, no per-route boilerplate
+- [x] Error responses match I-003's error code table exactly (`UNAUTHORIZED` / 401, `FORBIDDEN` / 403)
 
 ---
 
@@ -210,13 +210,13 @@ Both use the standard error envelope from I-003:
 
 ## Implementation Checklist
 
-- [ ] Create `src/api/dependencies/auth.py` (`extract_bearer_token`, `get_current_user`, `require_admin`)
-- [ ] Create `src/schemas/user_context.py` (`UserContext` Pydantic/dataclass model: `user_id`, `role`)
-- [ ] Wire `auth:token:{token_hash}` reads/writes against the Redis client from `src/cache/redis_client.py` (I-002)
-- [ ] Add token decode helper (`decode_adidos_token`) matching the Adidos token format
-- [ ] Add 401/403 handling consistent with I-003's exception handlers
-- [ ] Document revocation-lag trade-off inline (this file) and confirm it matches SPECIFICATION.md wording
-- [ ] Test locally against the docker-compose Redis cluster from I-002
+- [x] Create `src/api/dependencies/auth.py` (`extract_bearer_token`, `get_current_user`, `require_admin`)
+- [x] Create `src/schemas/user_context.py` (`UserContext` Pydantic/dataclass model: `user_id`, `role`)
+- [x] Wire `auth:token:{token_hash}` reads/writes against the Redis client from `src/cache/redis_client.py` (I-002)
+- [x] Add token decode helper (`decode_adidos_token`) matching the Adidos token format
+- [x] Add 401/403 handling consistent with I-003's exception handlers
+- [x] Document revocation-lag trade-off inline (this file) and confirm it matches SPECIFICATION.md wording
+- [x] Test locally against the docker-compose Redis cluster from I-002
 
 ---
 

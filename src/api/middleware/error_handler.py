@@ -10,6 +10,10 @@ from fastapi.exceptions import RequestValidationError
 from starlette.responses import JSONResponse
 
 from src.schemas.responses import error_envelope
+from src.services.rate_limit import (
+    RateLimitExceededError,
+    RateLimitServiceUnavailableError,
+)
 
 logger = logging.getLogger("poll_app.api")
 
@@ -44,6 +48,28 @@ def register_exception_handlers(app: FastAPI) -> None:
         return JSONResponse(
             status_code=exc.status_code,
             content=error_envelope(code, message, request, details),
+        )
+
+    @app.exception_handler(RateLimitExceededError)
+    async def rate_limit_exceeded_handler(request: Request, exc: RateLimitExceededError):
+        return JSONResponse(
+            status_code=429,
+            content=error_envelope(
+                "RATE_LIMIT_EXCEEDED",
+                exc.message,
+                request,
+                details={"retry_after_seconds": exc.retry_after},
+            ),
+            headers={"Retry-After": str(exc.retry_after)},
+        )
+
+    @app.exception_handler(RateLimitServiceUnavailableError)
+    async def rate_limit_unavailable_handler(
+        request: Request, exc: RateLimitServiceUnavailableError
+    ):
+        return JSONResponse(
+            status_code=503,
+            content=error_envelope("SERVICE_UNAVAILABLE", exc.message, request),
         )
 
     @app.exception_handler(RequestValidationError)

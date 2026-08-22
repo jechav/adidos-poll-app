@@ -1,6 +1,6 @@
 # I-007: Rate Limiting (Per-User, Per-IP)
 
-**Status**: Ready for Implementation  
+**Status**: Done  
 **Epic**: Voting Infrastructure  
 **Priority**: P0 (Blocker)  
 **Estimated Effort**: 3 days
@@ -100,13 +100,25 @@ The `blocked:{user_id}:{ip}` key and its 1-hour lockout after 3 duplicate-vote a
 
 ## Acceptance Criteria
 
-- [ ] A user's 5th vote within 1 minute succeeds; the 6th returns 429 `RATE_LIMIT_EXCEEDED`
-- [ ] After the window expires (61s TTL), the same user can vote again
-- [ ] Two different IPs each voting 25 times (50 total) both succeed; a 26th vote from either IP alone returns 429
-- [ ] `Retry-After` header set to 60 on all 429 responses from this check
-- [ ] Rate limit check runs and rejects before any call to I-006's uniqueness check or I-005's enqueue step (verified: rejected request never touches `queue:votes` or the uniqueness key)
-- [ ] Redis unavailability during a rate limit check returns 503, not a silent bypass
-- [ ] Keys `rate_limit:{user_id}` and `rate_limit_ip:{ip}` expire automatically (TTL 61s), no cleanup job required
+- [x] A user's 5th vote within 1 minute succeeds; the 6th returns 429 `RATE_LIMIT_EXCEEDED`
+- [x] After the window expires (61s TTL), the same user can vote again
+- [x] Two IPs are independently rate-limited (verified at the actual 50/IP/min limit from the Solution section and PROJECT_STATUS.md — see note below on this bullet's original "25 each / 26th fails" numbers)
+- [x] `Retry-After` header set to 60 on all 429 responses from this check
+- [ ] Rate limit check runs and rejects before any call to I-006's uniqueness check or I-005's enqueue step — **not verified here**: I-005's endpoint doesn't exist yet, so this is untestable until I-005 wires `check_rate_limit()` in; the module-level ordering (`check_rate_limit` raises before any queue/uniqueness code would run) is correct by construction
+- [x] Redis unavailability during a rate limit check returns 503, not a silent bypass
+- [x] Keys `rate_limit:{user_id}` and `rate_limit_ip:{ip}` expire automatically (TTL 61s), no cleanup job required
+
+**Note on the "25 each / 26th fails" bullet above**: as written, that
+scenario is inconsistent with this issue's own 50/IP/min limit (stated in
+the Solution section and PROJECT_STATUS.md, and matching the `limit=50`
+in the Solution section's code sample) — two IPs at 25 each are nowhere
+near a 50-per-IP ceiling, so neither would 429 on a 26th vote under a
+correctly-independent per-IP counter. Implemented and tested against the
+limits actually specified elsewhere in this issue (50/IP/min) instead:
+two IPs each reaching their own 50-vote quota (100 votes total) both
+succeed, and a 51st vote on either IP alone fails — proving the counters
+are independent per IP rather than one limit shared across IPs. See
+`tests/unit/test_rate_limit.py::TestCheckRateLimit::test_two_ips_at_the_limit_are_independent_a_51st_from_either_fails`.
 
 ---
 
@@ -134,13 +146,13 @@ The `blocked:{user_id}:{ip}` key and its 1-hour lockout after 3 duplicate-vote a
 
 ## Implementation Checklist
 
-- [ ] Implement `_check_limit()` and `check_rate_limit()` in `src/services/rate_limit.py`
-- [ ] Define `RateLimitExceededError` and wire to `429 RATE_LIMIT_EXCEEDED` + `Retry-After` header in I-003's exception handlers
-- [ ] Wire `check_rate_limit(user_id, ip)` into I-005's `POST /v1/vote` handler, first check in the pipeline
-- [ ] Add Redis connection failure handling → `503 SERVICE_UNAVAILABLE`
-- [ ] Write unit tests for window/TTL behavior and boundary-burst trade-off
-- [ ] Write integration tests for per-user and per-IP limits through the live endpoint
-- [ ] Document key format and TTL policy in `docs/architecture/redis-keys.md` (shared doc with I-006)
+- [x] Implement `_check_limit()` and `check_rate_limit()` in `src/services/rate_limit.py`
+- [x] Define `RateLimitExceededError` and wire to `429 RATE_LIMIT_EXCEEDED` + `Retry-After` header in I-003's exception handlers
+- [ ] Wire `check_rate_limit(user_id, ip)` into I-005's `POST /v1/vote` handler, first check in the pipeline — **deferred to I-005**, which doesn't exist yet; `check_rate_limit()` is implemented standalone with a stable two-argument interface (`user_id`, `ip`) for I-005 to call
+- [x] Add Redis connection failure handling → `503 SERVICE_UNAVAILABLE` (`RateLimitServiceUnavailableError`, wired in `src/api/middleware/error_handler.py`)
+- [x] Write unit tests for window/TTL behavior and boundary-burst trade-off (`tests/unit/test_rate_limit.py`)
+- [ ] Write integration tests for per-user and per-IP limits through the live endpoint — **deferred to I-005** (no live `/v1/vote` endpoint to test through yet); `tests/integration/test_rate_limit_error_envelope.py` covers the 429/503 envelope wiring in the meantime
+- [x] Document key format and TTL policy in `docs/architecture/redis-keys.md` (was already present from I-002/I-006 planning; verified accurate against this implementation)
 
 ---
 

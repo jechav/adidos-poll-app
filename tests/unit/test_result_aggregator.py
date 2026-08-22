@@ -9,6 +9,7 @@ Mirrors tests/unit/test_worker_processor.py's fake-Redis style.
 import uuid
 
 import pytest
+from redis.exceptions import ConnectionError as RedisConnectionError
 
 import src.services.result_aggregator as aggregator_module
 from src.services.result_aggregator import (
@@ -213,6 +214,68 @@ async def test_batch_single_mget_round_trip_for_all_polls(monkeypatch):
 
     assert len(calls) == 1
     assert len(calls[0]) == 4  # 2 polls x 2 answers each
+
+
+# --- Redis errors propagate (not swallowed) --------------------------------
+
+
+class RaisingPipeline:
+    """A pipeline whose `.execute()` raises, standing in for a Redis
+    connection failure/timeout surfacing mid-round-trip.
+    """
+
+    def get(self, key: str):
+        return self
+
+    async def execute(self):
+        raise RedisConnectionError("simulated Redis outage")
+
+
+class RaisingRedis:
+    def pipeline(self, transaction: bool = False):
+        return RaisingPipeline()
+
+    async def get(self, key: str):
+        raise RedisConnectionError("simulated Redis outage")
+
+
+@pytest.mark.asyncio
+async def test_compute_poll_results_propagates_redis_error_from_mget(monkeypatch):
+    """A `mget_pipelined` failure (the counter read) must not be caught
+    and hidden inside this module -- I-011 is responsible for catching it
+    and falling back to I-010, not this module.
+    """
+    poll_id = uuid.uuid4()
+    answers = _answers(poll_id)
+    monkeypatch.setattr(
+        aggregator_module, "get_cached_answers", lambda pid, redis: _fut(answers)
+    )
+
+    with pytest.raises(RedisConnectionError):
+        await compute_poll_results(poll_id, RaisingRedis())
+
+
+@pytest.mark.asyncio
+async def test_compute_poll_results_propagates_redis_error_from_answer_cache():
+    """A `get_cached_answers` failure (the answers-metadata read) must
+    also propagate uncaught, same as a counter-read failure.
+    """
+    poll_id = uuid.uuid4()
+
+    with pytest.raises(RedisConnectionError):
+        await compute_poll_results(poll_id, RaisingRedis())
+
+
+@pytest.mark.asyncio
+async def test_batch_propagates_redis_error(monkeypatch):
+    poll_id = uuid.uuid4()
+    answers = _answers(poll_id)
+    monkeypatch.setattr(
+        aggregator_module, "get_cached_answers", lambda pid, redis: _fut(answers)
+    )
+
+    with pytest.raises(RedisConnectionError):
+        await compute_poll_results_batch([poll_id], RaisingRedis())
 
 
 def _fut(value):

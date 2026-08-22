@@ -73,20 +73,13 @@ def _build_result(
 async def compute_poll_results(poll_id: UUID, redis) -> AggregatedResult:
     """Total votes and per-answer count + percentage for a single poll.
 
-    One Redis round trip beyond the (usually cache-hit) answers lookup:
-    both of the poll's counter keys are read via a single pipelined
-    `MGET`-equivalent (`mget_pipelined`), not two sequential `GET`s.
-    Missing/expired counter keys come back as `None` from Redis and are
-    coerced to `0` before summing — identical treatment to a counter key
-    that exists and is `0`.
+    A thin wrapper around `compute_poll_results_batch` for the one-poll
+    case, so the counter-key building, `mget_pipelined` call, and
+    `None`-to-`0` coercion live in exactly one place rather than being
+    duplicated between the single-poll and batch entry points.
     """
-    answers = await get_cached_answers(poll_id, redis)
-    keys = [_counter_key(poll_id, answer["answer_id"]) for answer in answers]
-
-    raw_counts = await mget_pipelined(redis, keys)
-    counts = [int(c) if c is not None else 0 for c in raw_counts]
-
-    return _build_result(poll_id, answers, counts)
+    results = await compute_poll_results_batch([poll_id], redis)
+    return results[poll_id]
 
 
 async def compute_poll_results_batch(
@@ -95,18 +88,23 @@ async def compute_poll_results_batch(
     """`compute_poll_results` for N polls, with only one `MGET` round
     trip for *all* of their vote counters combined.
 
-    GET /v1/polls (I-011) renders a list of polls, not one; calling
-    `compute_poll_results` per poll would mean N separate counter round
-    trips for N polls in the response. Here every poll's counter keys are
-    flattened into a single flat list up front, fetched in one
-    `mget_pipelined` call, then regrouped back by poll_id — so this
-    function's counter-reading cost is O(1) round trips regardless of how
-    many polls are requested.
+    GET /v1/polls (I-011) renders a list of polls, not one; N separate
+    per-poll counter round trips for N polls in the response would be
+    wasteful. Here every poll's counter keys are flattened into a single
+    flat list up front, fetched in one `mget_pipelined` call, then
+    regrouped back by poll_id — so this function's counter-reading cost
+    is O(1) round trips regardless of how many polls are requested (and
+    `compute_poll_results` above inherits that for the single-poll case
+    too, since it's built on top of this function).
 
     Answer-metadata lookups (`get_cached_answers`) are not folded into
     that same round trip: they're a separate, near-always-cache-hit GET
     per poll (1h TTL, populated lazily), not the hot counter path this
     function's single-round-trip guarantee is about.
+
+    Missing/expired counter keys come back as `None` from Redis and are
+    coerced to `0` before summing — identical treatment to a counter key
+    that exists and is `0`.
     """
     if not poll_ids:
         return {}

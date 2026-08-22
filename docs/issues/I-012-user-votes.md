@@ -1,6 +1,6 @@
 # I-012: GET /v1/user/votes Endpoint
 
-**Status**: Ready for Implementation  
+**Status**: Done  
 **Epic**: Result Aggregation & Caching  
 **Priority**: P1  
 **Estimated Effort**: 2 days
@@ -121,17 +121,17 @@ This endpoint never touches Redis and never returns `vote_count`/`percentage` fi
 
 ## Acceptance Criteria
 
-- [ ] `GET /v1/user/votes` returns 200 with the response envelope shape from I-003
-- [ ] Returns only the authenticated caller's own votes — `user_id` is taken exclusively from the validated token, never from a request parameter
-- [ ] Query is routed to the single shard owning the user's `user_id` (reuses I-008's shard-routing function; no cross-shard fan-out)
-- [ ] Each entry includes `poll_id`, `question`, `poll_state`, `answer_id`, `answer_text`, `voted_at`
-- [ ] Closed and archived polls the user voted on appear in the results (not filtered by poll state)
-- [ ] Pagination (`limit` default 20, max 100; `offset` default 0) supported, `pagination.total` correct
-- [ ] Anonymized votes (`user_id` nulled after 90 days per I-001's migration) no longer appear — verified as expected behavior, not treated as a bug
-- [ ] Query uses `idx_votes_user_poll`; confirmed via `EXPLAIN ANALYZE` that it's an index lookup, not a sequential scan
-- [ ] Unauthenticated requests return 401 via I-004's `Depends`
-- [ ] A user with zero votes returns 200 with `votes: []`
-- [ ] Endpoint has no dependency on Redis and is unaffected by a Redis outage (still fully functional during I-009's degraded state)
+- [x] `GET /v1/user/votes` returns 200 with the response envelope shape from I-003
+- [x] Returns only the authenticated caller's own votes — `user_id` is taken exclusively from the validated token, never from a request parameter
+- [x] Query is routed to the single shard owning the user's `user_id` (reuses I-008's shard-routing function; no cross-shard fan-out)
+- [x] Each entry includes `poll_id`, `question`, `poll_state`, `answer_id`, `answer_text`, `voted_at`
+- [x] Closed and archived polls the user voted on appear in the results (not filtered by poll state)
+- [x] Pagination (`limit` default 20, max 100; `offset` default 0) supported, `pagination.total` correct
+- [x] Anonymized votes (`user_id` nulled after 90 days per I-001's migration) no longer appear — verified as expected behavior, not treated as a bug
+- [x] Query uses the implicit unique index on `votes(user_id, poll_id)` (I-001's `UNIQUE(user_id, poll_id)` constraint — no separate `idx_votes_user_poll` was created); confirmed via `EXPLAIN ANALYZE` that it's an index lookup, not a sequential scan
+- [x] Unauthenticated requests return 401 via I-004's `Depends`
+- [x] A user with zero votes returns 200 with `votes: []`
+- [x] Endpoint has no dependency on Redis and is unaffected by a Redis outage (still fully functional during I-009's degraded state)
 
 ---
 
@@ -168,13 +168,13 @@ This endpoint never touches Redis and never returns `vote_count`/`percentage` fi
 
 ## Implementation Checklist
 
-- [ ] Add `GET /v1/user/votes` handler to `src/api/routes/user.py`
-- [ ] Create `src/db/queries/user_votes.py` (`get_user_votes` — single-shard join query)
-- [ ] Import (not reimplement) the shard-routing function from I-008's module
-- [ ] Create `src/schemas/user_votes.py` (`UserVotesData`, `UserVoteEntry` Pydantic response models)
-- [ ] Integration tests: `tests/integration/test_user_votes.py` (state visibility, pagination, anonymization behavior)
-- [ ] Shard-routing test: `tests/unit/test_user_votes_sharding.py`
-- [ ] Manual test with curl/Postman using tokens for two different users, confirm isolation
+- [x] Add `GET /v1/user/votes` handler to `src/api/routes/user.py`
+- [x] Create `src/db/queries/user_votes.py` (`get_user_votes` — single-shard join query)
+- [x] Import (not reimplement) the shard-routing function from I-008's module
+- [x] Create `src/schemas/user_votes.py` (`UserVotesData`, `UserVoteEntry` Pydantic response models)
+- [x] Integration tests: `tests/integration/test_user_votes.py` (state visibility, pagination, anonymization behavior)
+- [x] Shard-routing test: `tests/unit/test_user_votes_sharding.py`
+- [x] Manual test with curl/Postman using tokens for two different users, confirm isolation — covered by `tests/integration/test_user_votes.py::test_user_a_never_sees_user_bs_votes` and `::test_no_user_id_query_param_is_accepted_or_honored` against the real ASGI app; no separate manual run performed.
 
 ---
 

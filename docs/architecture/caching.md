@@ -90,3 +90,29 @@ Redis errors — a connection failure or timeout propagates to the caller.
 I-011 is responsible for catching that and falling back to I-010's
 `vote_counts` table; this module's job is correct computation when Redis
 is healthy, not resilience when it isn't.
+
+## Fallback: `vote_counts` (I-010)
+
+When Redis is unreachable, I-011 falls back to `vote_counts` — a
+materialized table refreshed every 5 minutes by the
+`refresh-vote-counts` CronJob (`scripts/jobs/refresh_vote_counts.py`).
+`votes` is sharded by `user_id` across 8+ Postgres shards, so no single
+shard has a poll's full count; the job fans out to every shard in
+parallel, sums the partial counts (a shard that's unreachable is logged
+and skipped, not fatal to the run), and broadcasts the merged rows —
+`(poll_id, answer_id, count, percentage, last_updated_at)` — to every
+shard, since `vote_counts` itself is replicated, not sharded.
+
+**Fallback trigger and staleness window**: I-011 treats a `vote_counts`
+read as the up-to-5-minutes-stale answer, not the always-fresh one — it
+surfaces `last_updated_at` (or a derived `stale: true` flag) whenever it
+serves from this table instead of Redis, so that staleness window is
+honest to the client rather than silent. `last_updated_at` reflects the
+most recent successful job run and is the only staleness signal; there
+is no synchronous, per-vote update path into `vote_counts`.
+
+**Percentage rounding is identical to the Redis path above** — the job
+imports and reuses `_percentage()` from `src/services/result_aggregator.py`
+rather than reimplementing it, specifically so a client that fails over
+from Redis to this fallback mid-session never sees percentages jump for
+reasons unrelated to new votes.

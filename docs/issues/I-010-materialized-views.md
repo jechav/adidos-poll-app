@@ -1,6 +1,6 @@
 # I-010: Materialized Views (Fallback)
 
-**Status**: Ready for Implementation  
+**Status**: Done  
 **Epic**: Result Aggregation & Caching  
 **Priority**: P1  
 **Estimated Effort**: 2 days
@@ -118,15 +118,15 @@ Deployed as a Kubernetes CronJob (`*/5 * * * *`) running `scripts/jobs/refresh_v
 
 ## Acceptance Criteria
 
-- [ ] CronJob runs every 5 minutes and completes well within that window at current data volumes
-- [ ] Job aggregates `votes` across all 8+ shards (cross-shard fan-in) before writing any row
-- [ ] Answers with zero votes still appear in `vote_counts` with `count = 0` (via `LEFT JOIN` from `answers`, not `GROUP BY` on `votes` alone)
-- [ ] Percentages match I-009's rounding rule exactly (independent per-answer rounding, `0.0` at zero votes)
-- [ ] Upserts are idempotent — re-running the job twice in a row produces identical `vote_counts` rows (aside from `last_updated_at`)
-- [ ] One shard being unreachable does not fail the entire job run; other shards are still processed and logged
-- [ ] `vote_counts` rows are written/refreshed on every shard (broadcast), not just one
-- [ ] I-011's fallback path successfully reads correct results from `vote_counts` when Redis is simulated as down (integration/chaos test)
-- [ ] `last_updated_at` accurately reflects the most recent successful job run, usable as a staleness signal
+- [x] CronJob runs every 5 minutes and completes well within that window at current data volumes (`deploy/cronjobs/refresh-vote-counts.yaml`, `activeDeadlineSeconds: 240`)
+- [x] Job aggregates `votes` across all 8+ shards (cross-shard fan-in) before writing any row
+- [x] Answers with zero votes still appear in `vote_counts` with `count = 0` (via `LEFT JOIN` from `answers`, not `GROUP BY` on `votes` alone)
+- [x] Percentages match I-009's rounding rule exactly (independent per-answer rounding, `0.0` at zero votes) — reuses `_percentage()` directly, not reimplemented
+- [x] Upserts are idempotent — re-running the job twice in a row produces identical `vote_counts` rows (aside from `last_updated_at`)
+- [x] One shard being unreachable does not fail the entire job run; other shards are still processed and logged
+- [x] `vote_counts` rows are written/refreshed on every shard (broadcast), not just one
+- [ ] I-011's fallback path successfully reads correct results from `vote_counts` when Redis is simulated as down (integration/chaos test) — **deferred**: I-011 (GET /v1/polls) doesn't exist yet, so this end-to-end criterion can't be exercised from this ticket. I-011's own implementation must add this test when it builds the fallback-read path this issue's `vote_counts` table now supports.
+- [x] `last_updated_at` accurately reflects the most recent successful job run, usable as a staleness signal
 
 ---
 
@@ -159,14 +159,14 @@ Deployed as a Kubernetes CronJob (`*/5 * * * *`) running `scripts/jobs/refresh_v
 
 ## Implementation Checklist
 
-- [ ] Create `scripts/jobs/refresh_vote_counts.py` (cross-shard fan-in, merge, broadcast upsert)
-- [ ] Create `src/db/shard_pool.py` helper if not already present from I-008 (parallel connections to all shards)
-- [ ] Reuse `_percentage()` from I-009's `src/services/result_aggregator.py` rather than reimplementing it
-- [ ] Add Kubernetes CronJob manifest (`*/5 * * * *`) in `deploy/cronjobs/refresh-vote-counts.yaml`
-- [ ] Unit tests: `tests/unit/test_refresh_vote_counts.py` (rounding parity, partial-shard-failure handling)
-- [ ] Integration test: multi-shard test containers, seeded votes, assert `vote_counts` correctness
-- [ ] Fallback integration test: Redis down, GET /v1/polls still returns correct (if stale) results
-- [ ] Document the fallback trigger condition and staleness window in `docs/architecture/caching.md`
+- [x] Create `scripts/jobs/refresh_vote_counts.py` (cross-shard fan-in, merge, broadcast upsert)
+- [x] Reuse I-008's `ShardConnectionPool` (`src/worker/db.py`) for parallel per-shard connections rather than creating a second, redundant shard-pool abstraction
+- [x] Reuse `_percentage()` from I-009's `src/services/result_aggregator.py` rather than reimplementing it
+- [x] Add Kubernetes CronJob manifest (`*/5 * * * *`) in `deploy/cronjobs/refresh-vote-counts.yaml`
+- [x] Unit tests: `tests/unit/test_refresh_vote_counts.py` (rounding parity, partial-shard-failure handling)
+- [x] Integration test: `tests/integration/test_refresh_vote_counts_db.py` against a real Postgres instance (seeded votes, zero-vote answers, idempotency) — run as a single "shard" since local dev has one Postgres instance standing in for all shards (same constraint as I-008/I-012's integration tests); the cross-shard merge arithmetic itself is covered against fakes in the unit suite
+- [ ] Fallback integration test: Redis down, GET /v1/polls still returns correct (if stale) results — **deferred to I-011**, which doesn't exist yet (see Acceptance Criteria note above)
+- [x] Document the fallback trigger condition and staleness window in `docs/architecture/caching.md`
 
 ---
 

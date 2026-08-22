@@ -1,0 +1,43 @@
+# I-010: recomputes the materialized `vote_counts` table from `votes`
+# every 5 minutes, so GET /v1/polls (I-011) has a durable fallback when
+# I-009's Redis path is unreachable. See docs/issues/I-010-materialized-views.md
+# and scripts/jobs/refresh_vote_counts.py.
+#
+# Runs as its own CronJob rather than an in-process scheduler on the API
+# or worker deployments, so a stuck run is independently killable/restartable
+# without touching live traffic.
+#
+# `POLL_APP_DATABASE_URL` here is the fallback DSN used when no
+# `POLL_APP_SHARD_{N}_DSN` override is set for a given shard (see
+# `src/worker/db.py::default_shard_dsn`) — production deployments with
+# real per-shard Postgres hosts should instead set one
+# `POLL_APP_SHARD_{N}_DSN` secret key per shard, mirroring how the vote
+# processor worker (I-008) is configured.
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: refresh-vote-counts
+spec:
+  schedule: "*/5 * * * *"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 1
+      activeDeadlineSeconds: 240
+      template:
+        spec:
+          restartPolicy: Never
+          containers:
+            - name: refresh-vote-counts
+              image: poll-app:latest
+              command: ["python", "-m", "scripts.jobs.refresh_vote_counts"]
+              env:
+                - name: POLL_APP_NUM_SHARDS
+                  value: "8"
+                - name: POLL_APP_DATABASE_URL
+                  valueFrom:
+                    secretKeyRef:
+                      name: poll-app-db
+                      key: database-url

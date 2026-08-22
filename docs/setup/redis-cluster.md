@@ -25,10 +25,24 @@ the bare host.** `redis-py`'s `RedisCluster` follows `CLUSTER SLOTS`, which
 returns the nodes' internal hostnames (`redis-node-2`, `redis-node-3`) —
 those aren't resolvable from the host machine even though the *startup*
 node (`localhost:7001`) is reachable, so a client run directly on the host
-will time out after the first handshake. Run the app itself as a
-compose service on `adidos-poll-app_default` (the network this file's
-`docker-compose.yml` creates), the same way it will reach Redis in
-Kubernetes-managed staging/production.
+will time out after the first handshake. This is why the app runs as a
+compose service (`app`, built from the root `Dockerfile`) on
+`adidos-poll-app_default` (the network this file's `docker-compose.yml`
+creates), the same way it will reach Redis in Kubernetes-managed
+staging/production:
+
+```bash
+docker compose up -d          # postgres, all 3 redis nodes, cluster-init, and app
+curl localhost:8000/health    # {"redis": "ok", ...} once the cluster is reachable
+```
+
+`pytest` still runs directly on the host (correctly — tests shouldn't
+require a container to execute), so it still can't reach the cluster's
+internal-hostname addresses and will keep skipping the live-cluster
+integration tests locally; that's expected, not a regression. See
+[I-025](../issues/I-025-redis-cluster-announce-address.md) for the full
+story, including a documented dead end (`cluster-announce-ip`) worth not
+re-attempting.
 
 ## Connecting from the app
 

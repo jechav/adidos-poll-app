@@ -41,6 +41,9 @@
 - [ ] [I-023: Load Tests (5x Peak: 100K votes/sec)](./I-023-load-tests.md)
 - [ ] [I-024: Pre-Launch Checklist](./I-024-launch-checklist.md)
 
+### Bugs / Infra
+- [x] [I-025: App Wasn't Actually Running Inside the Compose Network Redis Needs](./I-025-redis-cluster-announce-address.md)
+
 ## Epics
 
 ### Epic 1: Voting Infrastructure

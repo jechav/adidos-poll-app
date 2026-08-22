@@ -79,15 +79,26 @@ Start with [SPECIFICATION.md](./SPECIFICATION.md) to understand problem, solutio
 
 ### 2. Set Up Local Environment
 ```bash
-docker-compose up -d  # PostgreSQL, Redis cluster, etc.
-pip install -r requirements.txt
-psql "$DATABASE_URL" -f scripts/migrations/001_initial_schema.sql
-psql "$DATABASE_URL" -f scripts/migrations/002_anonymization_90days.sql
-psql "$DATABASE_URL" -f scripts/seed/polls_and_votes.sql  # Populate test data
+docker compose up -d  # PostgreSQL, Redis cluster, and the app itself
+```
+Apply migrations against the Postgres container (not a host-installed
+Postgres, if you have one on the same port — see
+[docs/setup/sharding.md](./docs/setup/sharding.md) for the exact commands
+and a `docker cp`/`docker exec` workaround for the schema's relative
+`\ir` includes).
+
+The app runs as its own `docker compose` service (`app`, built from the
+root `Dockerfile`) rather than via a host-run `uvicorn`, because Redis
+Cluster clients must connect from inside the compose network — see
+[docs/setup/redis-cluster.md](./docs/setup/redis-cluster.md) for why.
+Once migrations are applied:
+```bash
+curl localhost:8000/health  # {"redis": "ok", ...}
 ```
 
-See [docs/setup/sharding.md](./docs/setup/sharding.md) and
-[docs/setup/redis-cluster.md](./docs/setup/redis-cluster.md) for details.
+For running `pytest` (which runs directly on the host, not in a
+container — see docs/setup/redis-cluster.md for why that's fine): install
+`requirements.txt` into a local virtualenv first.
 
 ### 3. Implement Feature by Feature
 Issues are tracked in [docs/issues/](./docs/issues/). Pick an issue, implement, test, PR.

@@ -17,6 +17,7 @@ from src.services.rate_limit import (
 )
 from src.services.uniqueness import DuplicateVoteError, UniquenessCheckUnavailableError
 from src.services.vote_queue import VoteQueueUnavailableError
+from src.worker.db import ShardUnavailableError
 
 logger = logging.getLogger("poll_app.api")
 
@@ -132,6 +133,17 @@ def register_exception_handlers(app: FastAPI) -> None:
         return JSONResponse(
             status_code=503,
             content=error_envelope("SERVICE_UNAVAILABLE", exc.message, request),
+        )
+
+    @app.exception_handler(ShardUnavailableError)
+    async def shard_unavailable_handler(request: Request, exc: ShardUnavailableError):
+        # I-012's read path hit the same per-shard outage I-008's writes
+        # already handle with backoff — surfaced as 503, not a 500, since
+        # it's an infra availability issue, not a bug.
+        logger.warning("shard_unavailable", exc_info=exc)
+        return JSONResponse(
+            status_code=503,
+            content=error_envelope("SERVICE_UNAVAILABLE", str(exc), request),
         )
 
     @app.exception_handler(RequestValidationError)

@@ -10,6 +10,7 @@ from fastapi.exceptions import RequestValidationError
 from starlette.responses import JSONResponse
 
 from src.schemas.responses import error_envelope
+from src.services.uniqueness import DuplicateVoteError, UniquenessCheckUnavailableError
 
 logger = logging.getLogger("poll_app.api")
 
@@ -44,6 +45,36 @@ def register_exception_handlers(app: FastAPI) -> None:
         return JSONResponse(
             status_code=exc.status_code,
             content=error_envelope(code, message, request, details),
+        )
+
+    @app.exception_handler(DuplicateVoteError)
+    async def duplicate_vote_exception_handler(
+        request: Request, exc: DuplicateVoteError
+    ):
+        # I-006 Layer 1 (Redis SET NX) rejected an obvious duplicate
+        # before it was ever queued. Not wired into a live route yet —
+        # I-005 will call check_and_reserve_uniqueness() and let this
+        # propagate once it exists.
+        return JSONResponse(
+            status_code=409,
+            content=error_envelope(
+                "DUPLICATE_VOTE", str(exc), request
+            ),
+        )
+
+    @app.exception_handler(UniquenessCheckUnavailableError)
+    async def uniqueness_check_unavailable_exception_handler(
+        request: Request, exc: UniquenessCheckUnavailableError
+    ):
+        # I-006's Redis reservation check itself failed (connection
+        # error, cluster down, etc.) — fail safe with 503, never fail
+        # open by treating an unchecked request as "not a duplicate."
+        logger.warning("uniqueness_check_unavailable", exc_info=exc)
+        return JSONResponse(
+            status_code=503,
+            content=error_envelope(
+                "SERVICE_UNAVAILABLE", str(exc), request
+            ),
         )
 
     @app.exception_handler(RequestValidationError)

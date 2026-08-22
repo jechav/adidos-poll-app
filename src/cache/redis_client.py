@@ -53,3 +53,26 @@ async def close_redis() -> None:
 async def redis_dependency() -> RedisCluster:
     """FastAPI dependency: `Depends(redis_dependency)` in route handlers."""
     return await get_redis()
+
+
+async def mget_pipelined(redis: RedisCluster, keys: list[str]) -> list[str | None]:
+    """Fetch multiple keys in a single pipelined round trip (I-009).
+
+    Plain `MGET` isn't safe to use directly against a Redis Cluster: keys
+    for different polls/answers routinely land in different hash slots,
+    and Cluster's `MGET` requires every key to share one slot (otherwise
+    it raises `CROSSSLOT`). A pipeline of individual `GET`s sidesteps
+    that — redis-py's cluster pipeline groups the buffered commands by
+    the node that owns each key's slot and sends each node's batch in one
+    round trip, so this stays a small, bounded number of round trips
+    (one per node touched) rather than one round trip per key.
+
+    Returns results in the same order as `keys`; a missing key comes back
+    as `None`, matching `MGET` semantics.
+    """
+    if not keys:
+        return []
+    pipe = redis.pipeline(transaction=False)
+    for key in keys:
+        pipe.get(key)
+    return await pipe.execute()

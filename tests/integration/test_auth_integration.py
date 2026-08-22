@@ -10,6 +10,8 @@ Redis is unreachable (trust-on-first-use still applies), so they exercise
 the request/response contract regardless of whether a cluster is running.
 """
 
+import asyncio
+
 import pytest
 from httpx import ASGITransport, AsyncClient
 
@@ -32,7 +34,10 @@ async def client():
 async def redis():
     client = await get_redis()
     try:
-        await client.ping()
+        # Bounded: an unreachable cluster (e.g. nodes advertising internal
+        # docker-network addresses this process can't route to) would
+        # otherwise hang retrying rather than failing fast.
+        await asyncio.wait_for(client.ping(), timeout=3)
     except Exception:
         pytest.skip("no Redis cluster reachable")
     yield client

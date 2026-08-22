@@ -20,9 +20,29 @@ drops out of the user's visible history — consistent with the spec's
 retention policy, not special-cased here.
 """
 
+from dataclasses import dataclass
+from datetime import datetime
+from uuid import UUID
+
 from src.config import settings
 from src.worker.db import ShardConnectionPool
 from src.worker.sharding import shard_for_user
+
+
+@dataclass(frozen=True)
+class UserVoteRow:
+    """One row of `USER_VOTES_QUERY`, named rather than a positional tuple
+    — mirrors `src.services.polls.Poll`/`Answer`'s precedent for DB rows
+    the API layer consumes, so callers aren't coupled to the query's
+    column order.
+    """
+
+    poll_id: UUID
+    question: str
+    poll_state: str
+    answer_id: UUID
+    answer_text: str
+    voted_at: datetime
 
 USER_VOTES_QUERY = """
     SELECT
@@ -50,14 +70,13 @@ _pool = ShardConnectionPool()
 
 async def get_user_votes(
     user_id: str, limit: int, offset: int
-) -> tuple[list[tuple], int]:
+) -> tuple[list[UserVoteRow], int]:
     """Fetch one page of `user_id`'s vote history plus the total count.
 
     Routes to the single shard `user_id` hashes to (I-008's
-    `shard_for_user`) — never a cross-shard fan-out. Returns raw row
-    tuples (`poll_id, question, poll_state, answer_id, answer_text,
-    voted_at`) alongside the total number of matching votes, for the
-    caller to shape into `UserVotesData`.
+    `shard_for_user`) — never a cross-shard fan-out. Returns `UserVoteRow`
+    values (not raw tuples) alongside the total number of matching votes,
+    for the caller to shape into `UserVotesData`.
     """
     shard_id = shard_for_user(user_id, settings.num_shards)
     conn = await _pool.get_connection(shard_id)
@@ -66,4 +85,4 @@ async def get_user_votes(
         rows = await cur.fetchall()
         await cur.execute(USER_VOTES_COUNT_QUERY, (user_id,))
         (total,) = await cur.fetchone()
-    return rows, total
+    return [UserVoteRow(*row) for row in rows], total

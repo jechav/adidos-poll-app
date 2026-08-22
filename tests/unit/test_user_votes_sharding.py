@@ -13,7 +13,7 @@ import pytest
 
 import src.db.queries.user_votes as user_votes_module
 from src.config import settings
-from src.db.queries.user_votes import get_user_votes
+from src.db.queries.user_votes import UserVoteRow, get_user_votes
 from src.worker.sharding import shard_for_user
 
 
@@ -127,5 +127,5 @@ async def test_get_user_votes_returns_rows_and_total(monkeypatch):
 
     result_rows, total = await get_user_votes("user-1", limit=20, offset=0)
 
-    assert result_rows == rows
+    assert result_rows == [UserVoteRow(*rows[0])]
     assert total == 7

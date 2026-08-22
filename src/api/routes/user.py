@@ -98,14 +98,14 @@ async def list_user_votes(
     rows, total = await get_user_votes(user.user_id, limit, offset)
     votes = [
         UserVoteEntry(
-            poll_id=poll_id,
-            question=question,
-            poll_state=poll_state,
-            answer_id=answer_id,
-            answer_text=answer_text,
-            voted_at=voted_at.strftime("%Y-%m-%dT%H:%M:%SZ"),
+            poll_id=row.poll_id,
+            question=row.question,
+            poll_state=row.poll_state,
+            answer_id=row.answer_id,
+            answer_text=row.answer_text,
+            voted_at=row.voted_at.strftime("%Y-%m-%dT%H:%M:%SZ"),
         )
-        for poll_id, question, poll_state, answer_id, answer_text, voted_at in rows
+        for row in rows
     ]
     data = UserVotesData(
         votes=votes, pagination=Pagination(limit=limit, offset=offset, total=total)

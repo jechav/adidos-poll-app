@@ -1,6 +1,6 @@
 # I-005: Vote Acceptance & Queueing
 
-**Status**: Ready for Implementation  
+**Status**: Done  
 **Epic**: Voting Infrastructure  
 **Priority**: P0 (Blocker)  
 **Estimated Effort**: 4 days
@@ -136,17 +136,17 @@ This handler is a composition point, not an implementation of any of the above.
 
 ## Acceptance Criteria
 
-- [ ] `POST /v1/vote` returns 202 with `request_id` for a valid vote on an active poll
-- [ ] Voting on a closed/draft/archived poll returns 400 `POLL_CLOSED`
-- [ ] Voting with an `answer_id` that doesn't belong to `poll_id` returns 400 `INVALID_REQUEST`
-- [ ] Voting on a nonexistent poll or answer returns 404 `NOT_FOUND`
-- [ ] A second vote by the same user on the same poll returns 409 `DUPLICATE_VOTE` (no queue entry created)
-- [ ] Retrying an already-successful vote request returns 409, not 202
-- [ ] Exceeding rate limits returns 429 before any uniqueness check or enqueue happens
-- [ ] Vote payload pushed to `queue:votes` contains `vote_id`, `user_id`, `poll_id`, `answer_id`, `requested_at`
-- [ ] Missing/malformed request body returns 400 with field-level detail
-- [ ] Handler is `async def` and does not block on any database write
-- [ ] P99 handler latency < 200ms under load (excludes downstream queue processing)
+- [x] `POST /v1/vote` returns 202 with `request_id` for a valid vote on an active poll
+- [x] Voting on a closed/draft/archived poll returns 400 `POLL_CLOSED`
+- [x] Voting with an `answer_id` that doesn't belong to `poll_id` returns 400 `INVALID_REQUEST`
+- [x] Voting on a nonexistent poll or answer returns 404 `NOT_FOUND`
+- [x] A second vote by the same user on the same poll returns 409 `DUPLICATE_VOTE` (no queue entry created)
+- [x] Retrying an already-successful vote request returns 409, not 202 (same mechanism as the row above — the uniqueness key *is* the idempotency check, per spec decision #11)
+- [x] Exceeding rate limits returns 429 before any uniqueness check or enqueue happens
+- [x] Vote payload pushed to `queue:votes` contains `vote_id`, `user_id`, `poll_id`, `answer_id`, `requested_at`
+- [x] Missing/malformed request body returns 400 with field-level detail (pre-existing I-003 Pydantic validation, unchanged)
+- [x] Handler is `async def` and does not block on any database write (the only DB access, `load_poll_and_answer`, is a read; the write path is entirely I-008's, downstream of the queue)
+- [ ] P99 handler latency < 200ms under load — not exercised: needs a real multi-node deployment to measure meaningfully; tracked under I-023 (Load Tests) rather than re-implemented ad hoc here
 
 ---
 
@@ -175,14 +175,14 @@ This handler is a composition point, not an implementation of any of the above.
 
 ## Implementation Checklist
 
-- [ ] Add `VoteRequest` Pydantic model to `src/schemas/votes.py`
-- [ ] Implement `POST /v1/vote` handler in `src/api/routes/user.py`
-- [ ] Implement `load_poll_and_answer()` helper in `src/services/polls.py` (cached lookup)
-- [ ] Wire `check_rate_limit()` (I-007) and `check_and_reserve_uniqueness()` (I-006) as calls/dependencies
-- [ ] Implement `VotePayload` schema and `LPUSH` to `queue:votes` in `src/services/vote_queue.py`
-- [ ] Add error classes (`PollClosedError`, `InvalidRequestError`) mapping to I-003's exception handlers
-- [ ] Write integration tests covering all rows in the Error Cases table
-- [ ] Load test at 1000 votes/sec, confirm P99 < 200ms
+- [x] Add `VoteRequest` Pydantic model to `src/schemas/votes.py`
+- [x] Implement `POST /v1/vote` handler in `src/api/routes/user.py`
+- [x] Implement `load_poll_and_answer()` helper in `src/services/polls.py` (single shared, lock-guarded connection — not a caching layer; polls/answers are read on every vote, no Redis-side poll cache exists yet)
+- [x] Wire `check_rate_limit()` (I-007) and `check_and_reserve_uniqueness()` (I-006) as calls/dependencies
+- [x] Implement `VotePayload` schema and `LPUSH` to `queue:votes` in `src/services/vote_queue.py`
+- [x] Add error classes (`PollNotFoundError`, `PollClosedError`, `InvalidRequestError`, plus `VoteQueueUnavailableError` for the enqueue-failure path) mapping to I-003's exception handlers
+- [x] Write integration tests covering all rows in the Error Cases table (tests/integration/test_vote_acceptance.py, skips without a live Postgres + Redis cluster)
+- [ ] Load test at 1000 votes/sec, confirm P99 < 200ms — deferred to I-023
 
 ---
 

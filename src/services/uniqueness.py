@@ -91,6 +91,7 @@ class UniquenessCheckUnavailableError(Exception):
 
 class SupportsSetNX(Protocol):
     async def set(self, key: str, value: str, nx: bool = ...) -> Any: ...
+    async def delete(self, key: str) -> Any: ...
 
 
 async def check_and_reserve_uniqueness(
@@ -120,6 +121,37 @@ async def check_and_reserve_uniqueness(
 
     if not reserved:
         raise DuplicateVoteError(user_id, poll_id)
+
+
+async def release_reservation(
+    redis: SupportsSetNX, user_id: str, poll_id: UUID | str
+) -> None:
+    """Best-effort release of a Layer 1 reservation that was won but whose
+    vote never made it onto `queue:votes` (I-005: the `LPUSH` itself
+    failed after `check_and_reserve_uniqueness` already succeeded).
+
+    Without this, a transient Redis hiccup during enqueue would
+    permanently lock the user out of a vote that was never actually
+    accepted. Failures here are swallowed by the caller (I-005) rather
+    than raised — releasing the reservation is a nice-to-have, not a
+    correctness requirement: I-006's Layer 2 DB constraint is what
+    actually prevents a duplicate row if the release fails and a retry
+    later succeeds.
+
+    Accepted trade-off: `SET NX` and `LPUSH` are not one atomic operation.
+    If the `LPUSH` actually landed server-side but the client only saw a
+    connection error (e.g. a timeout after the write, not before it), this
+    release clears a *valid* reservation, and a client retry would then
+    push a second entry onto the queue for the same logical vote. This is
+    considered an acceptable, rare failure mode rather than something
+    worth a distributed-transaction mechanism to close — see I-006 and
+    I-008 for how a duplicate row is still caught downstream.
+    """
+    key = vote_reservation_key(user_id, poll_id)
+    try:
+        await redis.delete(key)
+    except RedisError:
+        pass
 
 
 InsertFn = Callable[[dict], Awaitable[None]]

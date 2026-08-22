@@ -20,6 +20,7 @@ from src.services.uniqueness import (
     UniquenessCheckUnavailableError,
     check_and_reserve_uniqueness,
     insert_vote_or_log_duplicate,
+    release_reservation,
     vote_reservation_key,
 )
 
@@ -38,9 +39,15 @@ class FakeRedis:
         self.store[key] = value
         return True
 
+    async def delete(self, key: str) -> int:
+        return 1 if self.store.pop(key, None) is not None else 0
+
 
 class BrokenRedis:
     async def set(self, key: str, value: str, nx: bool = False):
+        raise RedisConnectionError("connection refused")
+
+    async def delete(self, key: str):
         raise RedisConnectionError("connection refused")
 
 
@@ -68,6 +75,27 @@ async def test_second_reservation_for_same_pair_raises_duplicate():
 
     assert exc_info.value.user_id == "user-1"
     assert exc_info.value.poll_id == "poll-1"
+
+
+@pytest.mark.asyncio
+async def test_release_reservation_clears_the_key():
+    redis = FakeRedis()
+    await check_and_reserve_uniqueness(redis, "user-1", "poll-1")
+
+    await release_reservation(redis, "user-1", "poll-1")
+
+    assert "vote:user:user-1:poll:poll-1" not in redis.store
+    # The reservation is free again.
+    await check_and_reserve_uniqueness(redis, "user-1", "poll-1")
+
+
+@pytest.mark.asyncio
+async def test_release_reservation_swallows_redis_errors():
+    redis = BrokenRedis()
+
+    # Must not raise: this is a best-effort cleanup, not a correctness
+    # requirement (see the docstring's accepted trade-off).
+    await release_reservation(redis, "user-1", "poll-1")
 
 
 @pytest.mark.asyncio

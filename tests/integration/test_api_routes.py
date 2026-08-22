@@ -53,21 +53,6 @@ async def test_list_polls_success_envelope(client):
 
 
 @pytest.mark.asyncio
-async def test_cast_vote_returns_202(client):
-    resp = await client.post(
-        "/v1/vote",
-        headers=AUTH,
-        json={
-            "poll_id": "8f14e45f-ceea-4f5a-9d5a-6c7a3f2f1a1a",
-            "answer_id": "3ab21ecb-3f5a-4b3a-9d5a-6c7a3f2f1a1b",
-        },
-    )
-    assert resp.status_code == 202
-    body = resp.json()
-    assert body["data"]["status"] == "queued"
-
-
-@pytest.mark.asyncio
 async def test_cast_vote_invalid_body_returns_400(client):
     resp = await client.post("/v1/vote", headers=AUTH, json={"poll_id": "not-a-uuid"})
     assert resp.status_code == 400

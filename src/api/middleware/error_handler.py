@@ -10,11 +10,13 @@ from fastapi.exceptions import RequestValidationError
 from starlette.responses import JSONResponse
 
 from src.schemas.responses import error_envelope
+from src.services.polls import InvalidRequestError, PollClosedError, PollNotFoundError
 from src.services.rate_limit import (
     RateLimitExceededError,
     RateLimitServiceUnavailableError,
 )
 from src.services.uniqueness import DuplicateVoteError, UniquenessCheckUnavailableError
+from src.services.vote_queue import VoteQueueUnavailableError
 
 logger = logging.getLogger("poll_app.api")
 
@@ -98,6 +100,35 @@ def register_exception_handlers(app: FastAPI) -> None:
     async def rate_limit_unavailable_handler(
         request: Request, exc: RateLimitServiceUnavailableError
     ):
+        return JSONResponse(
+            status_code=503,
+            content=error_envelope("SERVICE_UNAVAILABLE", exc.message, request),
+        )
+
+    @app.exception_handler(PollNotFoundError)
+    async def poll_not_found_handler(request: Request, exc: PollNotFoundError):
+        return JSONResponse(
+            status_code=404,
+            content=error_envelope("NOT_FOUND", str(exc), request),
+        )
+
+    @app.exception_handler(PollClosedError)
+    async def poll_closed_handler(request: Request, exc: PollClosedError):
+        return JSONResponse(
+            status_code=400,
+            content=error_envelope("POLL_CLOSED", str(exc), request),
+        )
+
+    @app.exception_handler(InvalidRequestError)
+    async def invalid_request_handler(request: Request, exc: InvalidRequestError):
+        return JSONResponse(
+            status_code=400,
+            content=error_envelope("INVALID_REQUEST", str(exc), request),
+        )
+
+    @app.exception_handler(VoteQueueUnavailableError)
+    async def vote_queue_unavailable_handler(request: Request, exc: VoteQueueUnavailableError):
+        logger.warning("vote_queue_unavailable", exc_info=exc)
         return JSONResponse(
             status_code=503,
             content=error_envelope("SERVICE_UNAVAILABLE", exc.message, request),

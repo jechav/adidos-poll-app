@@ -12,7 +12,7 @@
 - [x] [I-004: Authentication Middleware](./I-004-auth-middleware.md)
 
 ### Phase 2: Core Voting (Weeks 3-4)
-- [ ] [I-005: Vote Acceptance & Queueing](./I-005-vote-acceptance.md)
+- [x] [I-005: Vote Acceptance & Queueing](./I-005-vote-acceptance.md)
 - [x] [I-006: Uniqueness Enforcement (Redis + DB)](./I-006-uniqueness.md)
 - [x] [I-007: Rate Limiting (Per-User, Per-IP)](./I-007-rate-limiting.md)
 - [x] [I-008: Vote Processor Workers](./I-008-vote-processor.md)

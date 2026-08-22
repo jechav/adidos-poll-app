@@ -1,6 +1,6 @@
 # I-009: Result Aggregation (Redis Cache)
 
-**Status**: Ready for Implementation  
+**Status**: Done  
 **Epic**: Result Aggregation & Caching  
 **Priority**: P0 (Blocker)  
 **Estimated Effort**: 3 days
@@ -154,14 +154,14 @@ async def compute_poll_results_batch(poll_ids: list[UUID], redis: Redis) -> dict
 
 ## Implementation Checklist
 
-- [ ] Create `src/services/result_aggregator.py` (`compute_poll_results`, `compute_poll_results_batch`)
-- [ ] Create `src/cache/answer_cache.py` (cached answer metadata lookups, lazy population + TTL)
-- [ ] Create `src/schemas/results.py` (`AggregatedResult`, `AnswerResult` Pydantic models)
-- [ ] Add a pipelined `MGET` helper to `src/cache/redis_client.py`
-- [ ] Unit tests: `tests/unit/test_result_aggregator.py` (rounding, zero votes, missing keys)
-- [ ] Integration test: seed Redis counters directly, assert `compute_poll_results` output
-- [ ] Performance test: benchmark P95 latency under concurrent reads (target < 50ms)
-- [ ] Document the Redis key structure and TTL policy in `docs/architecture/caching.md`
+- [x] Create `src/services/result_aggregator.py` (`compute_poll_results`, `compute_poll_results_batch`)
+- [x] Create `src/cache/answer_cache.py` (cached answer metadata lookups, lazy population + TTL)
+- [x] Create `src/schemas/results.py` (`AggregatedResult`, `AnswerResult` Pydantic models)
+- [x] Add a pipelined `MGET` helper to `src/cache/redis_client.py`
+- [x] Unit tests: `tests/unit/test_result_aggregator.py` (rounding, zero votes, missing keys)
+- [x] Integration test: seed Redis counters directly, assert `compute_poll_results` output
+- [x] Performance test: benchmark P95 latency under concurrent reads (target < 50ms)
+- [x] Document the Redis key structure and TTL policy in `docs/architecture/caching.md`
 
 ---
 

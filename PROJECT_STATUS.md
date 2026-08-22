@@ -208,48 +208,6 @@ Total: ~37 days (8.5 weeks)
 - ✅ Redis hit rate tracked (alert < 95%)
 - ✅ Constraint violations tracked (alert > 0 anomalies/min)
 
----
-
-## Current State
-
-### Completed ✅
-- [x] Architecture grilled (49 questions, 10 rounds)
-- [x] Domain model documented
-- [x] Specification written (38 user stories, 18 implementation decisions)
-- [x] Issue tracker created (24 issues, 4 epics)
-- [x] Dependencies mapped (critical path identified)
-- [x] Project structure scaffolded
-- [x] Git repository initialized
-
-### Next Step
-**Start with [I-001: Database Schema](./docs/issues/I-001-database-schema.md)** ← Ready to implement now
-
----
-
-## Team Onboarding
-
-### 1. Read the Spec (2 hours)
-- Domain model (30 min)
-- Specification (60 min)
-- Architecture overview (30 min)
-
-### 2. Understand the Stack
-- FastAPI (Python)
-- Redis Cluster (caching + queue)
-- PostgreSQL sharding (write scaling)
-- Kubernetes (deployment)
-
-### 3. Pick an Issue
-- Phase 1 issues are unblocked (I-001, I-002 can start in parallel)
-- Create branch, implement, write tests, submit PR
-
-### 4. Deploy
-- Local: Docker Compose (PostgreSQL + Redis)
-- Staging: Kubernetes cluster (multiple replicas)
-- Production: Big bang launch with monitoring
-
----
-
 ## Risk Register
 
 ### Risk 1: Single PostgreSQL primary becomes bottleneck
@@ -271,11 +229,6 @@ Total: ~37 days (8.5 weeks)
 ---
 
 ## Communication
-
-### Daily Stand-up
-- What did I ship?
-- What am I working on?
-- Am I blocked?
 
 ### Issue Tracking
 - Link PRs to issues

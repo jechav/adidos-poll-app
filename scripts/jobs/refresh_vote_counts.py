@@ -78,13 +78,18 @@ def merge_shard_results(
     A shard that raised (surfaced by `asyncio.gather(..., return_exceptions=True)`
     as an `Exception` in this list rather than a row list) is logged and
     skipped — partial results from the other shards are still merged, so
-    one bad shard doesn't blank out the whole job run.
+    one bad shard doesn't blank out the whole job run. `per_shard_results`
+    is assumed to be in shard-id order (0..N-1), matching how
+    `refresh_vote_counts` builds the `gather` call from `range(num_shards)`
+    — `asyncio.gather` preserves input order, so this holds.
     """
     merged: dict[tuple[UUID, UUID], int] = defaultdict(int)
-    for shard_result in per_shard_results:
+    for shard_id, shard_result in enumerate(per_shard_results):
         if isinstance(shard_result, Exception):
             logger.warning(
-                "shard unreachable during vote_counts refresh", exc_info=shard_result
+                "shard unreachable during vote_counts refresh",
+                extra={"shard_id": shard_id},
+                exc_info=shard_result,
             )
             continue
         for poll_id, answer_id, vote_count in shard_result:
@@ -120,8 +125,11 @@ async def upsert_vote_counts(
 
     `vote_counts` is replicated (every shard carries the full table), so
     the same upserts are written to all `num_shards` connections, not
-    just one. A shard unreachable at write time is logged and skipped —
-    same availability-over-consistency posture as the read side.
+    just one. A shard failing at write time — whether unreachable at
+    connect time, or the `INSERT`/`commit` itself failing on a connection
+    that later drops mid-write — is logged and skipped without aborting
+    the other shards' writes: same availability-over-consistency posture
+    as the read side.
     """
     if not rows:
         return
@@ -129,19 +137,28 @@ async def upsert_vote_counts(
     async def write_to_shard(shard_id: int) -> None:
         try:
             conn = await pool.get_connection(shard_id)
+            async with conn.cursor() as cur:
+                for (poll_id, answer_id), (count, percentage) in rows.items():
+                    await cur.execute(
+                        UPSERT_VOTE_COUNTS_SQL,
+                        (str(poll_id), str(answer_id), count, percentage),
+                    )
+            await conn.commit()
         except ShardUnavailableError:
             logger.warning(
                 "shard unreachable during vote_counts broadcast write",
                 extra={"shard_id": shard_id},
             )
-            return
-        async with conn.cursor() as cur:
-            for (poll_id, answer_id), (count, percentage) in rows.items():
-                await cur.execute(
-                    UPSERT_VOTE_COUNTS_SQL,
-                    (str(poll_id), str(answer_id), count, percentage),
-                )
-        await conn.commit()
+        except Exception:
+            # Anything past the connect step (e.g. the connection dropping
+            # mid-`INSERT`) must not abort the other shards' writes either
+            # — only `ShardUnavailableError` gets its own branch above
+            # because it's the expected, already-classified failure mode.
+            logger.warning(
+                "shard write failed during vote_counts broadcast",
+                extra={"shard_id": shard_id},
+                exc_info=True,
+            )
 
     await asyncio.gather(*(write_to_shard(shard_id) for shard_id in range(num_shards)))
 

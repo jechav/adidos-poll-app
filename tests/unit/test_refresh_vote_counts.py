@@ -195,6 +195,43 @@ async def test_upsert_of_no_rows_writes_nothing():
     assert pool.writes[1] == []
 
 
+class FailingCursor(FakeCursor):
+    """Connects fine, but the write itself fails mid-`INSERT` — the
+    connection-drops-mid-write failure mode, distinct from
+    `ShardUnavailableError` (which only covers the connect step)."""
+
+    async def execute(self, sql, params=None):
+        raise RuntimeError("connection dropped mid-INSERT")
+
+
+class FailingConn(FakeConn):
+    def cursor(self):
+        return FailingCursor(self._log)
+
+
+@pytest.mark.asyncio
+async def test_upsert_skips_a_shard_whose_write_fails_after_connecting():
+    """A shard that connects successfully but whose INSERT/commit then
+    raises (not a ShardUnavailableError) must not abort the other
+    shards' writes — regression test for the code-review finding that
+    upsert_vote_counts's write_to_shard only caught ShardUnavailableError,
+    letting any other exception propagate out of asyncio.gather and abort
+    every other shard's broadcast write.
+    """
+    poll_id, answer_a, _ = _ids()
+    rows = {(poll_id, answer_a): (5, 100.0)}
+    pool = FakePool(num_shards=3)
+    pool.conns[1] = FailingConn(pool.writes[1])
+
+    await upsert_vote_counts(pool, num_shards=3, rows=rows)
+
+    assert len(pool.writes[0]) == 1
+    assert pool.conns[0].committed is True
+    assert len(pool.writes[1]) == 0
+    assert len(pool.writes[2]) == 1
+    assert pool.conns[2].committed is True
+
+
 # --- refresh_vote_counts (end-to-end orchestration over fakes) -----------
 
 

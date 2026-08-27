@@ -1,0 +1,51 @@
+# I-016: batches unreported `anomalies` rows (`reported_at IS NULL`) and
+# POSTs them to Adidos every 30 minutes. See
+# docs/issues/I-016-anomaly-reporting.md and src/jobs/report_anomalies.py.
+#
+# `concurrencyPolicy: Allow` (not `Forbid`, unlike refresh-vote-counts.yaml)
+# is intentional: src/jobs/report_anomalies.py's own Redis lock
+# (report_anomalies:lock, TTL 300s) already guards against two runs
+# sending the same batch, so a slow run overlapping the next scheduled
+# tick is safe -- the loser exits immediately rather than being killed
+# mid-POST by Kubernetes, which could otherwise leave a batch sent to
+# Adidos but never marked reported_at.
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: report-anomalies
+spec:
+  schedule: "*/30 * * * *"
+  concurrencyPolicy: Allow
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 1
+      activeDeadlineSeconds: 240
+      template:
+        spec:
+          restartPolicy: Never
+          containers:
+            - name: report-anomalies
+              image: poll-app:latest
+              command: ["python", "-m", "src.jobs.report_anomalies"]
+              env:
+                - name: POLL_APP_DATABASE_URL
+                  valueFrom:
+                    secretKeyRef:
+                      name: poll-app-db
+                      key: database-url
+                - name: POLL_APP_REDIS_STARTUP_HOST
+                  value: "redis-node-1"
+                - name: POLL_APP_REDIS_STARTUP_PORT
+                  value: "7001"
+                - name: POLL_APP_ADIDOS_ANOMALY_WEBHOOK_URL
+                  valueFrom:
+                    secretKeyRef:
+                      name: poll-app-adidos
+                      key: anomaly-webhook-url
+                - name: POLL_APP_ADIDOS_SERVICE_TOKEN
+                  valueFrom:
+                    secretKeyRef:
+                      name: poll-app-adidos
+                      key: service-token

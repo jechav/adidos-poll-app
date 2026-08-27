@@ -27,7 +27,7 @@
 - [x] [I-013: Admin Poll Management Endpoints](./I-013-admin-endpoints.md)
 - [x] [I-014: Bot Detection & Alerting](./I-014-bot-detection.md)
 - [x] [I-015: Duplicate Detection (3-Strike Block)](./I-015-duplicate-detection.md)
-- [ ] [I-016: Anomaly Reporting to Adidos](./I-016-anomaly-reporting.md)
+- [x] [I-016: Anomaly Reporting to Adidos](./I-016-anomaly-reporting.md)
 
 ### Phase 5: Observability (Weeks 9-10)
 - [ ] [I-017: Metrics & Monitoring (Prometheus)](./I-017-monitoring.md)

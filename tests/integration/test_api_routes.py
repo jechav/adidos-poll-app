@@ -42,11 +42,21 @@ async def test_list_polls_requires_auth(client):
 
 @pytest.mark.asyncio
 async def test_list_polls_success_envelope(client):
+    # Real handler as of I-011: no Redis is reachable in this test process,
+    # so it falls back to I-010's `vote_counts` path (`meta.stale: true`)
+    # rather than raising. `polls`/`pagination` content depends on
+    # whatever rows other tests have seeded into the shared DB — see
+    # tests/integration/test_list_polls.py and
+    # tests/integration/test_list_polls_fallback.py for content coverage
+    # against an isolated fixture; this test only asserts envelope shape.
     resp = await client.get("/v1/polls", headers=AUTH)
     assert resp.status_code == 200
     body = resp.json()
     assert body["success"] is True
-    assert body["data"] == {"polls": []}
+    assert isinstance(body["data"]["polls"], list)
+    assert body["data"]["pagination"]["limit"] == 20
+    assert body["data"]["pagination"]["offset"] == 0
+    assert "total" in body["data"]["pagination"]
     assert "timestamp" in body["meta"]
     assert "request_id" in body["meta"]
     assert resp.headers["x-request-id"] == body["meta"]["request_id"]

@@ -32,6 +32,7 @@ from src.schemas.results import AggregatedResult
 from src.schemas.user_context import UserContext
 from src.schemas.user_votes import Pagination, UserVoteEntry, UserVotesData
 from src.schemas.votes import VoteRequest
+from src.services.bot_detection import record_vote_attempt
 from src.services.polls import load_poll_and_answer, validate_vote_target
 from src.services.rate_limit import check_rate_limit
 from src.services.result_aggregator import compute_poll_results_batch
@@ -106,6 +107,14 @@ async def cast_vote(
     validate_vote_target(poll, answer, vote.poll_id, vote.answer_id)
 
     client_ip = request.client.host if request.client else "unknown"
+
+    # I-014's bot-detection counters see every attempt that reaches this
+    # handler, not just ones that pass I-007's rate limiter — a burst
+    # that gets individually rate-limited is itself part of the pattern
+    # this issue exists to catch. Best-effort: never raises, never adds
+    # a blocking read to this hot path.
+    await record_vote_attempt(redis, ip=client_ip, user_id=user.user_id)
+
     await check_rate_limit(user_id=user.user_id, ip=client_ip)
 
     # I-006's Layer 1 reservation runs immediately before the enqueue, per

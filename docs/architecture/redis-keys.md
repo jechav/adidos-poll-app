@@ -14,6 +14,11 @@ against. **Do not introduce a new prefix without updating this table.**
 | `cache:poll:{poll_id}:answer:{answer_id}` | String (counter, `INCR`) | I-008 (worker, on vote write) | I-009 (aggregation), I-011 (result reads) | None (ages naturally, no explicit invalidation per spec decision #16) | Real-time vote count per answer |
 | `cache:poll:{poll_id}:answers` | String (JSON array) | I-009 (lazy populate from `answers` table on miss) | I-009 (aggregation, to build the counter keys above) | 3600s (1h) | `[{"answer_id", "text", "order"}, ...]`; safe to cache aggressively — answers are immutable once a poll is active |
 | `auth:token:{token_hash}` | Hash (`user_id`, `role`) | I-004 | I-004 | 300-600s (5-10 min) | Cached Adidos token validation result |
+| `botcheck:ip:{ip}` | Sorted Set (`ZADD` timestamp) | I-005 (inline, on every vote acceptance attempt) | I-014 (periodic evaluator) | No key-level TTL; members trimmed via `ZREMRANGEBYSCORE` (10s rolling window) at evaluation time | Timestamps of recent attempts from one IP, independent of I-007's rate-limit counters |
+| `botcheck:ip_users:{ip}` | Set (`SADD user_id`) | I-005 (inline) | I-014 (periodic evaluator) | 300s | Distinct `user_id`s seen from one IP in a 5-minute window (low-and-slow detection) |
+| `botcheck:global:{bucket}` | String (`INCR`), `bucket` = current unix second | I-005 (inline) | I-014 (periodic evaluator) | 5s | Total vote attempts service-wide in a 1-second bucket |
+| `botcheck:ip_burst_streak:{ip}` | String (`INCR` counter) | I-014 (periodic evaluator) | I-014 (periodic evaluator) | 3x evaluator interval | Consecutive evaluator ticks the single-IP-burst condition has held, for warning->critical escalation |
+| `botcheck:cooldown:{rule}:{key}` | String (flag) | I-014 | I-014 | rule-specific (see I-014's rule table) | Suppresses re-alerting on the same rule/target while a condition is still active |
 
 ## Rationale
 

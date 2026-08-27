@@ -1,0 +1,47 @@
+# I-014: the periodic bot-pattern evaluator (`src/jobs/bot_detection.py`).
+# Runs as its own long-lived Deployment — a continuous asyncio loop, not
+# a one-shot job like scripts/jobs/refresh_vote_counts.py (I-010's
+# CronJob), so a Deployment (not a CronJob) is the right primitive.
+#
+# Deliberately its own pod, separate from both the API server deployment
+# and I-008's vote-processor worker deployment: evaluation work must
+# never compete with request-serving or DB-write capacity during the
+# exact bursts it's trying to detect (see I-014's Solution section).
+# `replicas: 1` — the evaluator's cooldown keys (`botcheck:cooldown:*`)
+# assume a single writer; running more than one replica would just
+# duplicate evaluation work without any benefit.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: bot-detection-evaluator
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: bot-detection-evaluator
+  template:
+    metadata:
+      labels:
+        app: bot-detection-evaluator
+    spec:
+      containers:
+        - name: bot-detection-evaluator
+          image: poll-app:latest
+          command: ["python", "-m", "src.jobs.bot_detection"]
+          env:
+            - name: POLL_APP_REDIS_STARTUP_HOST
+              value: "redis-node-1"
+            - name: POLL_APP_REDIS_STARTUP_PORT
+              value: "7001"
+            - name: POLL_APP_DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: poll-app-db
+                  key: database-url
+          resources:
+            requests:
+              cpu: "50m"
+              memory: "64Mi"
+            limits:
+              cpu: "200m"
+              memory: "128Mi"

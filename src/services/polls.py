@@ -15,7 +15,7 @@ from __future__ import annotations
 
 import asyncio
 from dataclasses import dataclass
-from uuid import UUID
+from uuid import UUID, uuid4
 
 import psycopg
 
@@ -124,3 +124,156 @@ async def _get_connection() -> psycopg.AsyncConnection:
             settings.database_url, connect_timeout=2
         )
     return _conn
+
+
+# --- Admin poll management (I-013) -----------------------------------
+#
+# `AdminAnswer`/`AdminPoll` are separate dataclasses from `Answer`/`Poll`
+# above: those two carry only the fields I-005's vote-acceptance path
+# needs (poll_id/state, answer_id/poll_id); admin management needs the
+# full row (question, per-*_at timestamps, answer text/order), so
+# reusing the narrower shapes would mean widening them for a use case
+# they were never meant to serve.
+
+# draft -> active -> closed -> archived, strictly one-way, one step at a
+# time (DOMAIN_MODEL.md's `PollState` value object).
+POLL_STATE_ORDER = {"draft": 0, "active": 1, "closed": 2, "archived": 3}
+
+_TIMESTAMP_COLUMN_BY_STATE = {
+    "active": "activated_at",
+    "closed": "closed_at",
+    "archived": "archived_at",
+}
+
+
+@dataclass(frozen=True)
+class AdminAnswer:
+    answer_id: UUID
+    text: str
+    order: int
+
+
+@dataclass(frozen=True)
+class AdminPoll:
+    poll_id: UUID
+    question: str
+    state: str
+    answers: list[AdminAnswer]
+    created_at: object
+    activated_at: object | None
+    closed_at: object | None
+    archived_at: object | None
+
+
+def validate_transition(current: str, requested: str) -> None:
+    """Raise `InvalidRequestError` unless `requested` is exactly one step
+    forward of `current` in `POLL_STATE_ORDER`. Same-state requests are
+    handled by the caller as an idempotent no-op *before* this is called
+    — this function only validates an actual transition attempt.
+    """
+    if POLL_STATE_ORDER[requested] != POLL_STATE_ORDER[current] + 1:
+        raise InvalidRequestError(
+            f"Cannot transition poll from '{current}' to '{requested}'; "
+            "states move forward one step at a time "
+            "(draft -> active -> closed -> archived)"
+        )
+
+
+async def create_admin_poll(question: str, answer_texts: list[str]) -> AdminPoll:
+    """Create a poll + its answers, always landing in `draft` state
+    (I-001's schema default) — activation is a separate, explicit
+    transition (`transition_poll`).
+    """
+    poll_id = uuid4()
+    answers = [
+        AdminAnswer(answer_id=uuid4(), text=text, order=i)
+        for i, text in enumerate(answer_texts)
+    ]
+
+    async with _conn_lock:
+        conn = await _get_connection()
+        async with conn.cursor() as cur:
+            await cur.execute(
+                "INSERT INTO polls (poll_id, question, state) "
+                "VALUES (%s, %s, 'draft') RETURNING created_at",
+                (str(poll_id), question),
+            )
+            (created_at,) = await cur.fetchone()
+            for answer in answers:
+                await cur.execute(
+                    'INSERT INTO answers (answer_id, poll_id, answer_text, "order") '
+                    "VALUES (%s, %s, %s, %s)",
+                    (str(answer.answer_id), str(poll_id), answer.text, answer.order),
+                )
+        await conn.commit()
+
+    return AdminPoll(
+        poll_id=poll_id,
+        question=question,
+        state="draft",
+        answers=answers,
+        created_at=created_at,
+        activated_at=None,
+        closed_at=None,
+        archived_at=None,
+    )
+
+
+async def get_admin_poll(poll_id: UUID) -> AdminPoll | None:
+    """Full poll row (state + all lifecycle timestamps) plus its answers,
+    for `PUT /v1/admin/polls/{poll_id}/state`'s existence/idempotency
+    checks. Returns `None` if `poll_id` doesn't exist.
+    """
+    async with _conn_lock:
+        conn = await _get_connection()
+        async with conn.cursor() as cur:
+            await cur.execute(
+                "SELECT poll_id, question, state, created_at, activated_at, "
+                "closed_at, archived_at FROM polls WHERE poll_id = %s",
+                (str(poll_id),),
+            )
+            poll_row = await cur.fetchone()
+            if poll_row is None:
+                return None
+            await cur.execute(
+                'SELECT answer_id, answer_text, "order" FROM answers '
+                'WHERE poll_id = %s ORDER BY "order"',
+                (str(poll_id),),
+            )
+            answer_rows = await cur.fetchall()
+
+    return AdminPoll(
+        poll_id=poll_row[0],
+        question=poll_row[1],
+        state=poll_row[2],
+        answers=[
+            AdminAnswer(answer_id=row[0], text=row[1], order=row[2])
+            for row in answer_rows
+        ],
+        created_at=poll_row[3],
+        activated_at=poll_row[4],
+        closed_at=poll_row[5],
+        archived_at=poll_row[6],
+    )
+
+
+async def transition_poll(poll_id: UUID, new_state: str) -> AdminPoll:
+    """Write `new_state` and stamp the matching `*_at` column. Assumes the
+    caller (the route handler) has already validated the transition via
+    `validate_transition` — this function performs the write
+    unconditionally.
+    """
+    timestamp_column = _TIMESTAMP_COLUMN_BY_STATE[new_state]
+    async with _conn_lock:
+        conn = await _get_connection()
+        async with conn.cursor() as cur:
+            await cur.execute(
+                f"UPDATE polls SET state = %s, {timestamp_column} = now() "
+                "WHERE poll_id = %s",
+                (new_state, str(poll_id)),
+            )
+        await conn.commit()
+
+    updated = await get_admin_poll(poll_id)
+    assert updated is not None  # just updated it; must still exist
+    return updated

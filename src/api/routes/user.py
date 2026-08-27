@@ -33,10 +33,15 @@ from src.schemas.user_context import UserContext
 from src.schemas.user_votes import Pagination, UserVoteEntry, UserVotesData
 from src.schemas.votes import VoteRequest
 from src.services.bot_detection import record_vote_attempt
+from src.services.duplicate_block import enforce_not_blocked, record_duplicate_attempt
 from src.services.polls import load_poll_and_answer, validate_vote_target
 from src.services.rate_limit import check_rate_limit
 from src.services.result_aggregator import compute_poll_results_batch
-from src.services.uniqueness import check_and_reserve_uniqueness, release_reservation
+from src.services.uniqueness import (
+    DuplicateVoteError,
+    check_and_reserve_uniqueness,
+    release_reservation,
+)
 from src.services.vote_queue import VotePayload, VoteQueueUnavailableError, enqueue_vote
 
 router = APIRouter(prefix="/v1", tags=["user"])
@@ -103,10 +108,13 @@ async def cast_vote(
     user: UserContext = Depends(get_current_user),
     redis: RedisCluster = Depends(redis_dependency),
 ):
-    poll, answer = await load_poll_and_answer(vote.poll_id, vote.answer_id)
-    validate_vote_target(poll, answer, vote.poll_id, vote.answer_id)
-
     client_ip = request.client.host if request.client else "unknown"
+
+    # I-015: the cheapest possible early-exit for a known-bad
+    # (user_id, ip) pair — runs before the poll/answer lookup and before
+    # I-007's rate limiter, since there's no reason to spend a DB-backed
+    # lookup or a rate-limit check on a request already known to fail.
+    await enforce_not_blocked(user.user_id, client_ip, redis)
 
     # I-014's bot-detection counters see every attempt that reaches this
     # handler, not just ones that pass I-007's rate limiter — a burst
@@ -115,12 +123,20 @@ async def cast_vote(
     # a blocking read to this hot path.
     await record_vote_attempt(redis, ip=client_ip, user_id=user.user_id)
 
+    poll, answer = await load_poll_and_answer(vote.poll_id, vote.answer_id)
+    validate_vote_target(poll, answer, vote.poll_id, vote.answer_id)
+
     await check_rate_limit(user_id=user.user_id, ip=client_ip)
 
     # I-006's Layer 1 reservation runs immediately before the enqueue, per
     # I-005's spec: the queue must never receive a vote that will be
-    # rejected as a duplicate.
-    await check_and_reserve_uniqueness(redis, user.user_id, vote.poll_id)
+    # rejected as a duplicate. I-015 hooks the 409 path to count strikes
+    # toward a 3-strike block.
+    try:
+        await check_and_reserve_uniqueness(redis, user.user_id, vote.poll_id)
+    except DuplicateVoteError:
+        await record_duplicate_attempt(user.user_id, client_ip, vote.poll_id, redis)
+        raise
 
     payload = VotePayload(
         vote_id=uuid4(),

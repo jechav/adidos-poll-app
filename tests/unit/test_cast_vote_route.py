@@ -28,6 +28,14 @@ class FakeRedis:
         self.deleted.append(key)
         return 1
 
+    async def exists(self, key: str) -> int:
+        # I-015's enforce_not_blocked check: this fake never has a
+        # blocked:{user_id}:{ip} key set, so every request is allowed
+        # through. record_vote_attempt (I-014) is best-effort and
+        # swallows any AttributeError from this fake lacking `.pipeline`,
+        # so it doesn't need its own fake here.
+        return 0
+
 
 @pytest.fixture
 async def client():

@@ -192,20 +192,24 @@ async def create_admin_poll(question: str, answer_texts: list[str]) -> AdminPoll
 
     async with _conn_lock:
         conn = await _get_connection()
-        async with conn.cursor() as cur:
-            await cur.execute(
-                "INSERT INTO polls (poll_id, question, state) "
-                "VALUES (%s, %s, 'draft') RETURNING created_at",
-                (str(poll_id), question),
-            )
-            (created_at,) = await cur.fetchone()
-            for answer in answers:
+        try:
+            async with conn.cursor() as cur:
                 await cur.execute(
-                    'INSERT INTO answers (answer_id, poll_id, answer_text, "order") '
-                    "VALUES (%s, %s, %s, %s)",
-                    (str(answer.answer_id), str(poll_id), answer.text, answer.order),
+                    "INSERT INTO polls (poll_id, question, state) "
+                    "VALUES (%s, %s, 'draft') RETURNING created_at",
+                    (str(poll_id), question),
                 )
-        await conn.commit()
+                (created_at,) = await cur.fetchone()
+                for answer in answers:
+                    await cur.execute(
+                        'INSERT INTO answers (answer_id, poll_id, answer_text, "order") '
+                        "VALUES (%s, %s, %s, %s)",
+                        (str(answer.answer_id), str(poll_id), answer.text, answer.order),
+                    )
+            await conn.commit()
+        except Exception:
+            await conn.rollback()
+            raise
 
     return AdminPoll(
         poll_id=poll_id,
@@ -266,13 +270,17 @@ async def transition_poll(poll_id: UUID, new_state: str) -> AdminPoll:
     timestamp_column = _TIMESTAMP_COLUMN_BY_STATE[new_state]
     async with _conn_lock:
         conn = await _get_connection()
-        async with conn.cursor() as cur:
-            await cur.execute(
-                f"UPDATE polls SET state = %s, {timestamp_column} = now() "
-                "WHERE poll_id = %s",
-                (new_state, str(poll_id)),
-            )
-        await conn.commit()
+        try:
+            async with conn.cursor() as cur:
+                await cur.execute(
+                    f"UPDATE polls SET state = %s, {timestamp_column} = now() "
+                    "WHERE poll_id = %s",
+                    (new_state, str(poll_id)),
+                )
+            await conn.commit()
+        except Exception:
+            await conn.rollback()
+            raise
 
     updated = await get_admin_poll(poll_id)
     assert updated is not None  # just updated it; must still exist

@@ -1,30 +1,47 @@
 """User-facing v1 routes (I-003).
 
-`GET /v1/polls` (I-011) is still a reserved placeholder. `POST /v1/vote`
-(I-005) is the real handler: it sequences poll/answer validation, the
-rate limiter (I-007), the uniqueness reservation (I-006), and the queue
-hand-off (I-008 drains it) — it does not reimplement any of those, only
-composes them. `GET /v1/user/votes` (I-012) is also real: it deliberately
-bypasses I-009's Redis aggregation path (this is a low-volume, per-user
-lookup, not the hot aggregate path) and reads the caller's own votes
-directly from the single Postgres shard `user.user_id` hashes to.
+`GET /v1/polls` (I-011) is real: it reads poll metadata from PostgreSQL
+(`fetch_polls_page`), overlays live vote counts via I-009's
+`compute_poll_results_batch` in a single Redis round trip, and falls back
+to I-010's `vote_counts` table (`fetch_vote_counts_fallback`) when Redis
+is unavailable — never a 503 for that reason alone. `POST /v1/vote`
+(I-005) sequences poll/answer validation, the rate limiter (I-007), the
+uniqueness reservation (I-006), and the queue hand-off (I-008 drains it)
+— it does not reimplement any of those, only composes them. `GET
+/v1/user/votes` (I-012) is also real: it deliberately bypasses I-009's
+Redis aggregation path (this is a low-volume, per-user lookup, not the
+hot aggregate path) and reads the caller's own votes directly from the
+single Postgres shard `user.user_id` hashes to.
 """
 
+from typing import Literal
 from uuid import uuid4
 
 from fastapi import APIRouter, Depends, Query, Request, status
 from redis.asyncio.cluster import RedisCluster
+from redis.exceptions import RedisClusterException, RedisError
 
 from src.api.dependencies.auth import get_current_user
 from src.cache.redis_client import redis_dependency
+from src.db.queries.polls import fetch_polls_page, fetch_vote_counts_fallback
 from src.db.queries.user_votes import get_user_votes
+from src.schemas.polls import Pagination as PollPagination
+from src.schemas.polls import PollListData, PollSummary, _format_ts
 from src.schemas.responses import now_iso, success_envelope
+from src.schemas.results import AggregatedResult
 from src.schemas.user_context import UserContext
 from src.schemas.user_votes import Pagination, UserVoteEntry, UserVotesData
 from src.schemas.votes import VoteRequest
+from src.services.bot_detection import record_vote_attempt
+from src.services.duplicate_block import enforce_not_blocked, record_duplicate_attempt
 from src.services.polls import load_poll_and_answer, validate_vote_target
 from src.services.rate_limit import check_rate_limit
-from src.services.uniqueness import check_and_reserve_uniqueness, release_reservation
+from src.services.result_aggregator import compute_poll_results_batch
+from src.services.uniqueness import (
+    DuplicateVoteError,
+    check_and_reserve_uniqueness,
+    release_reservation,
+)
 from src.services.vote_queue import VotePayload, VoteQueueUnavailableError, enqueue_vote
 
 router = APIRouter(prefix="/v1", tags=["user"])
@@ -32,10 +49,56 @@ router = APIRouter(prefix="/v1", tags=["user"])
 
 @router.get("/polls")
 async def list_polls(
-    request: Request, user: UserContext = Depends(get_current_user)
+    request: Request,
+    state: Literal["active", "closed", "archived"] = "active",
+    limit: int = Query(default=20, le=100),
+    offset: int = Query(default=0, ge=0),
+    user: UserContext = Depends(get_current_user),
+    redis: RedisCluster = Depends(redis_dependency),
 ):
-    """Placeholder — result aggregation lands in I-011."""
-    return success_envelope({"polls": []}, request)
+    """List polls with live results (I-011, spec stories #1, #5, #8).
+
+    Poll metadata comes from PostgreSQL (`fetch_polls_page`); vote counts
+    come from I-009's Redis path when it's healthy, or I-010's
+    `vote_counts` fallback when it isn't — `meta.stale` tells the client
+    which one served this response.
+    """
+    polls, total = await fetch_polls_page(state=state, limit=limit, offset=offset)
+    poll_ids = [p.poll_id for p in polls]
+
+    try:
+        results_by_poll = await compute_poll_results_batch(poll_ids, redis)
+        stale = False
+    except (RedisError, RedisClusterException):
+        # A connection error, timeout, or a fully-unreachable cluster
+        # (RedisClusterException at node-discovery time isn't itself a
+        # RedisError subclass) must never surface as a 503 here — I-010's
+        # vote_counts fallback exists for exactly this case.
+        results_by_poll = await fetch_vote_counts_fallback(poll_ids)
+        stale = True
+
+    empty_result = AggregatedResult(poll_id=uuid4(), total_votes=0, answers=[])
+    summaries = [
+        PollSummary(
+            poll_id=poll.poll_id,
+            question=poll.question,
+            state=poll.state,
+            answers=results_by_poll.get(
+                poll.poll_id, empty_result
+            ).answers,
+            total_votes=results_by_poll.get(poll.poll_id, empty_result).total_votes,
+            created_at=_format_ts(poll.created_at),
+            activated_at=_format_ts(poll.activated_at),
+        )
+        for poll in polls
+    ]
+    data = PollListData(
+        polls=summaries,
+        pagination=PollPagination(limit=limit, offset=offset, total=total),
+    )
+    envelope = success_envelope(data.model_dump(mode="json"), request)
+    envelope["meta"]["stale"] = stale
+    return envelope
 
 
 @router.post("/vote", status_code=status.HTTP_202_ACCEPTED)
@@ -45,16 +108,35 @@ async def cast_vote(
     user: UserContext = Depends(get_current_user),
     redis: RedisCluster = Depends(redis_dependency),
 ):
+    client_ip = request.client.host if request.client else "unknown"
+
+    # I-015: the cheapest possible early-exit for a known-bad
+    # (user_id, ip) pair — runs before the poll/answer lookup and before
+    # I-007's rate limiter, since there's no reason to spend a DB-backed
+    # lookup or a rate-limit check on a request already known to fail.
+    await enforce_not_blocked(user.user_id, client_ip, redis)
+
+    # I-014's bot-detection counters see every attempt that reaches this
+    # handler, not just ones that pass I-007's rate limiter — a burst
+    # that gets individually rate-limited is itself part of the pattern
+    # this issue exists to catch. Best-effort: never raises, never adds
+    # a blocking read to this hot path.
+    await record_vote_attempt(redis, ip=client_ip, user_id=user.user_id)
+
     poll, answer = await load_poll_and_answer(vote.poll_id, vote.answer_id)
     validate_vote_target(poll, answer, vote.poll_id, vote.answer_id)
 
-    client_ip = request.client.host if request.client else "unknown"
     await check_rate_limit(user_id=user.user_id, ip=client_ip)
 
     # I-006's Layer 1 reservation runs immediately before the enqueue, per
     # I-005's spec: the queue must never receive a vote that will be
-    # rejected as a duplicate.
-    await check_and_reserve_uniqueness(redis, user.user_id, vote.poll_id)
+    # rejected as a duplicate. I-015 hooks the 409 path to count strikes
+    # toward a 3-strike block.
+    try:
+        await check_and_reserve_uniqueness(redis, user.user_id, vote.poll_id)
+    except DuplicateVoteError:
+        await record_duplicate_attempt(user.user_id, client_ip, vote.poll_id, redis)
+        raise
 
     payload = VotePayload(
         vote_id=uuid4(),

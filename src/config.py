@@ -13,6 +13,13 @@ class Settings(BaseSettings):
     num_shards: int = 8
     database_url: str = "postgresql://postgres@localhost:5432/poll_app"
 
+    # I-016: outbound anomaly-reporting job. `adidos_service_token` is a
+    # static bearer token from config (deeper auth negotiation with
+    # Adidos is assumed pre-arranged, not designed here — see I-016's
+    # Out of Scope).
+    adidos_anomaly_webhook_url: str = "https://adidos.example.com/v1/anomalies"
+    adidos_service_token: str = ""
+
     model_config = {"env_prefix": "POLL_APP_"}
 
 

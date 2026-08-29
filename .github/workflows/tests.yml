@@ -1,0 +1,75 @@
+name: Tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  # I-021: mocked-infrastructure suite, fast, no Docker services needed.
+  unit:
+    name: Unit tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -r requirements.txt
+      - run: pytest tests/unit -v
+
+  # I-022: real dockerized PostgreSQL + Redis Cluster via docker-compose
+  # (this repo's existing integration-test convention -- see
+  # docs/setup/testing.md's "Deviation from testcontainers-python" note).
+  # Runs as its own job so it can execute in parallel with `unit` and
+  # carry a longer timeout for container startup + real I/O.
+  integration:
+    name: Integration tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Start Postgres + Redis Cluster
+        run: docker compose up -d postgres redis-node-1 redis-node-2 redis-node-3 redis-cluster-init
+
+      - name: Wait for Postgres
+        run: |
+          for i in $(seq 1 30); do
+            docker compose exec -T postgres pg_isready -U poll_app -d poll_app && break
+            sleep 1
+          done
+
+      - name: Apply migrations
+        run: scripts/db/run-sql.sh migrations
+
+      - name: Wait for Redis Cluster to form
+        run: |
+          for i in $(seq 1 30); do
+            state=$(docker compose exec -T redis-node-1 redis-cli -p 6379 cluster info | grep cluster_state | tr -d '\r')
+            [ "$state" = "cluster_state:ok" ] && break
+            sleep 1
+          done
+
+      - name: Build app image
+        run: docker compose build app
+
+      # Runs inside the compose network (not on the bare GitHub Actions
+      # host) so the real Redis Cluster is actually reachable -- see
+      # docs/setup/testing.md's "A real constraint on where pytest runs"
+      # section for why running on the host would only ever exercise the
+      # skip path for every Redis-backed test here.
+      - name: Run integration suite
+        run: |
+          docker compose run --rm \
+            -v "$PWD":/app -w /app \
+            -e DATABASE_URL=postgresql://poll_app:poll_app@postgres:5432/poll_app \
+            -e POLL_APP_DATABASE_URL=postgresql://poll_app:poll_app@postgres:5432/poll_app \
+            -e POLL_APP_REDIS_STARTUP_HOST=redis-node-1 \
+            -e POLL_APP_REDIS_STARTUP_PORT=6379 \
+            app python -m pytest tests/integration -v
+
+      - name: Tear down
+        if: always()
+        run: docker compose down -v

@@ -93,6 +93,49 @@ async def test_enqueue_failure_releases_uniqueness_reservation_and_returns_503(
 
 
 @pytest.mark.asyncio
+async def test_cast_vote_threads_request_id_into_the_queued_payload(client, fake_redis, monkeypatch):
+    """I-018: the `request_id` `RequestContextMiddleware` assigns to the
+    request must end up on the `VotePayload` pushed to `queue:votes`, so
+    the worker can re-bind the same value and continue the trace.
+    """
+    poll_id, answer_id = uuid.uuid4(), uuid.uuid4()
+    _override_auth("user-3")
+    app.dependency_overrides[redis_dependency] = lambda: fake_redis
+
+    captured_payloads = []
+
+    async def fake_load_poll_and_answer(pid, aid):
+        return Poll(poll_id=poll_id, state="active"), Answer(answer_id=answer_id, poll_id=poll_id)
+
+    async def fake_check_rate_limit(**kwargs):
+        return None
+
+    async def fake_check_and_reserve_uniqueness(redis, user_id, pid):
+        return None
+
+    async def fake_enqueue_vote(redis, payload):
+        captured_payloads.append(payload)
+
+    monkeypatch.setattr(user_routes, "load_poll_and_answer", fake_load_poll_and_answer)
+    monkeypatch.setattr(user_routes, "check_rate_limit", fake_check_rate_limit)
+    monkeypatch.setattr(
+        user_routes, "check_and_reserve_uniqueness", fake_check_and_reserve_uniqueness
+    )
+    monkeypatch.setattr(user_routes, "enqueue_vote", fake_enqueue_vote)
+
+    resp = await client.post(
+        "/v1/vote",
+        headers={"Authorization": "Bearer user-3", "x-request-id": "req-fixed-id"},
+        json={"poll_id": str(poll_id), "answer_id": str(answer_id)},
+    )
+
+    assert resp.status_code == 202
+    assert len(captured_payloads) == 1
+    assert captured_payloads[0].request_id == "req-fixed-id"
+    assert resp.headers["X-Request-ID"] == "req-fixed-id"
+
+
+@pytest.mark.asyncio
 async def test_valid_vote_calls_rate_limit_before_uniqueness(client, fake_redis, monkeypatch):
     poll_id, answer_id = uuid.uuid4(), uuid.uuid4()
     _override_auth("user-2")

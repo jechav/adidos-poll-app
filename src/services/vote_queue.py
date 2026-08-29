@@ -8,6 +8,12 @@ each entry with `VotePayload.model_validate_json` — this module's
 `VotePayload` carries one extra field (`requested_at`) that the worker's
 own `VotePayload` doesn't declare; Pydantic ignores unknown fields by
 default, so the extra field round-trips harmlessly.
+
+`request_id` (I-018) is required here: the route (`src/api/routes/user.py`)
+always has one bound in `request.state` by the time it builds this
+payload (`RequestContextMiddleware` guarantees it for every request), and
+threading it through is what lets `grep request_id=...` reconstruct one
+vote's full API-to-worker lifecycle. See `docs/architecture/logging.md`.
 """
 
 from uuid import UUID
@@ -24,6 +30,7 @@ class VotePayload(BaseModel):
     poll_id: UUID
     answer_id: UUID
     requested_at: str
+    request_id: str
 
 
 class VoteQueueUnavailableError(Exception):

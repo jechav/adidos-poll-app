@@ -6,9 +6,21 @@ import time
 import uuid
 
 import pytest
+from prometheus_client import generate_latest
+from prometheus_client.parser import text_string_to_metric_families
 
+from src.metrics.registry import REGISTRY
 from src.worker.models import VotePayload
 from src.worker.queue_consumer import QUEUE_KEY, dequeue_batch
+
+
+def _queue_depth_gauge_value(queue: str) -> float | None:
+    text = generate_latest(REGISTRY).decode("utf-8")
+    for family in text_string_to_metric_families(text):
+        for s in family.samples:
+            if s.name == "poll_queue_depth" and s.labels.get("queue") == queue:
+                return s.value
+    return None
 
 
 class FakeRedis:
@@ -35,6 +47,9 @@ class FakeRedis:
     async def incr(self, key: str) -> int:
         self.counters[key] = self.counters.get(key, 0) + 1
         return self.counters[key]
+
+    async def llen(self, key: str) -> int:
+        return len(self.lists.get(key, []))
 
 
 def _vote_json(user_id: str = "user-1") -> str:
@@ -122,3 +137,14 @@ async def test_dequeue_batch_does_not_busy_poll_forever_on_empty_queue(redis):
 
     assert batch == []
     assert elapsed < 2, "dequeue_batch did not honor its timeout_s deadline"
+
+
+@pytest.mark.asyncio
+async def test_dequeue_batch_updates_the_queue_depth_gauge_after_draining(redis):
+    for i in range(5):
+        await redis.lpush(QUEUE_KEY, _vote_json(f"user-{i}"))
+
+    await dequeue_batch(redis, min_size=1, max_size=2, timeout_s=1)
+
+    # 5 pushed, 2 drained by this batch -> 3 left in the list.
+    assert _queue_depth_gauge_value("votes") == 3

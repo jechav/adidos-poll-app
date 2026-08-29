@@ -17,6 +17,7 @@ import psycopg
 from psycopg import errors as pg_errors
 
 from src.config import settings
+from src.metrics.registry import record_constraint_violation
 from src.worker.models import VotePayload
 
 logger = logging.getLogger(__name__)
@@ -131,12 +132,18 @@ async def batch_insert_votes(
 
 
 async def insert_votes_individually(
-    conn: psycopg.AsyncConnection, votes: list[VotePayload]
+    conn: psycopg.AsyncConnection, votes: list[VotePayload], *, shard_id: int
 ) -> list[VotePayload]:
     """Per-row fallback after a batch-level UniqueViolation: one duplicate
     must not sink the whole batch. Duplicates are logged and skipped —
     per I-006, no retry, no client-facing error (the client already got
     a 202 when the vote was queued).
+
+    Each skipped duplicate also increments I-017's
+    `poll_db_constraint_violations_total{shard=...}` — a rate anomaly
+    here (many violations/min on one shard) can mean the Redis `SET NX`
+    uniqueness layer (I-006) is failing to catch duplicates before they
+    reach the queue, per the metric's design in docs/issues/I-017-monitoring.md.
     """
     successful: list[VotePayload] = []
     for vote in votes:
@@ -150,6 +157,7 @@ async def insert_votes_individually(
             successful.append(vote)
         except pg_errors.UniqueViolation:
             await conn.rollback()
+            record_constraint_violation(shard_id)
             logger.warning(
                 "duplicate_vote_at_db_layer",
                 extra={

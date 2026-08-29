@@ -15,6 +15,8 @@ from uuid import UUID
 from pydantic import BaseModel
 from redis.exceptions import RedisError
 
+from src.metrics.registry import QUEUE_LABEL_VOTES, set_queue_depth
+
 QUEUE_KEY = "queue:votes"
 
 
@@ -40,6 +42,9 @@ class VoteQueueUnavailableError(Exception):
 
 async def enqueue_vote(redis, payload: VotePayload, *, queue_key: str = QUEUE_KEY) -> None:
     try:
-        await redis.lpush(queue_key, payload.model_dump_json())
+        depth = await redis.lpush(queue_key, payload.model_dump_json())
     except RedisError as exc:
         raise VoteQueueUnavailableError() from exc
+    # `LPUSH` returns the list's length post-push, so this is a live
+    # depth read with no extra round trip — I-017's `poll_queue_depth`.
+    set_queue_depth(QUEUE_LABEL_VOTES, depth)

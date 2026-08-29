@@ -1,0 +1,9 @@
+# I-023: Locust load-testing suite dependencies.
+#
+# Deliberately kept in its own file rather than folded into the top-
+# level requirements.txt: Locust brings in gevent, which monkey-patches
+# socket/ssl/threading at import time (see loadtest/tests/test_shapes.py
+# for the concrete failure that causes if it's imported in the same
+# process as the app's asyncio-based test suite). The application image
+# must never import locust; only the load-test runner image does.
+locust>=2.31,<3.0

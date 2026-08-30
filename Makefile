@@ -1,15 +1,16 @@
 .PHONY: test-unit test-integration test
 
-# Fast, dependency-free unit suite (I-021) — fakeredis + an in-memory
-# poll/answer fake, no Postgres/Redis cluster required. Meant to run on
-# every commit; see docs/setup/testing.md.
+# I-021: hermetic, mocked-infrastructure suite -- never touches Docker.
 test-unit:
 	pytest tests/unit
 
-# Needs a real PostgreSQL + Redis cluster reachable from the host (see
-# docs/setup/redis-cluster.md); tests skip themselves when unreachable.
+# I-022: real dockerized PostgreSQL + Redis. Assumes
+# `docker compose up -d postgres redis-node-1 redis-node-2 redis-node-3 redis-cluster-init`
+# has already been run (and migrations applied via `scripts/db/run-sql.sh
+# migrations`) -- see docs/setup/testing.md for the full prerequisites and
+# for why some Redis-backed tests only exercise for real when run inside
+# the compose network rather than directly on the host.
 test-integration:
 	pytest tests/integration
 
-test:
-	pytest
+test: test-unit test-integration

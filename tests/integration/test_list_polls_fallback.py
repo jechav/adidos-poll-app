@@ -2,11 +2,12 @@
 Redis is unreachable, the endpoint must still return 200, sourced from
 I-010's `vote_counts` table, with `meta.stale: true`.
 
-No Redis cluster is reachable in this test environment (the test suite
-doesn't spin one up), so every request through the real ASGI app already
-exercises the fallback path for free — this suite's job is asserting the
-fallback's correctness (counts, percentages, `stale` flag), not
-simulating the failure.
+The CI integration job runs this suite against a real, reachable Redis
+cluster (I-022), so the `client` fixture overrides `redis_dependency`
+with a stub that always raises a connection error — forcing every
+request through the real ASGI app onto the fallback path deterministically.
+This suite's job is asserting the fallback's correctness (counts,
+percentages, `stale` flag), not whether Redis happens to be reachable.
 
 Skips automatically if DATABASE_URL isn't reachable, mirroring
 tests/integration/test_user_votes.py.
@@ -18,8 +19,10 @@ import uuid
 import psycopg
 import pytest
 from httpx import ASGITransport, AsyncClient
+from redis.exceptions import ConnectionError as RedisConnectionError
 
 from src.api.app import app
+from src.cache.redis_client import redis_dependency
 
 DATABASE_URL = os.environ.get(
     "DATABASE_URL", "postgresql://postgres@localhost:5432/poll_app"
@@ -41,11 +44,23 @@ def db_conn():
     connection.close()
 
 
+class _UnreachableRedis:
+    """Stands in for `redis_dependency` so every request exercises the
+    fallback path deterministically, regardless of whether a real Redis
+    cluster happens to be reachable from this test environment (the CI
+    integration job runs the whole suite against a real cluster)."""
+
+    async def get(self, *args, **kwargs):
+        raise RedisConnectionError("simulated redis outage")
+
+
 @pytest.fixture
 async def client():
+    app.dependency_overrides[redis_dependency] = lambda: _UnreachableRedis()
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as ac:
         yield ac
+    app.dependency_overrides.pop(redis_dependency, None)
 
 
 def _auth(user_id: str = "user-fallback") -> dict:

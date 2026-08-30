@@ -23,7 +23,11 @@ DATABASE_URL = os.environ.get(
     "DATABASE_URL", "postgresql://postgres@localhost:5432/poll_app"
 )
 
-CONCURRENT_CALLS = 200
+CONCURRENT_CALLS = 80  # stays under the shared RedisCluster client's
+# per-node max_connections=100 (src/cache/redis_client.py) — each
+# concurrent compute_poll_results call briefly holds a connection for
+# its answers-cache GET, so a count above that pool size trips
+# MaxConnectionsError rather than measuring real request latency.
 P95_TARGET_SECONDS = 0.050
 
 

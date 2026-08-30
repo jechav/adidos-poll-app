@@ -17,7 +17,7 @@ jobs:
         with:
           python-version: "3.12"
       - run: pip install -r requirements.txt
-      - run: pytest tests/unit -v
+      - run: python -m pytest tests/unit -v
 
   # I-022: real dockerized PostgreSQL + Redis Cluster via docker-compose
   # (this repo's existing integration-test convention -- see

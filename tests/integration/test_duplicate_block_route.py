@@ -102,10 +102,13 @@ async def test_third_duplicate_blocks_pair_and_writes_one_anomaly(
     assert first.status_code == 202  # first vote is accepted, not a duplicate
 
     second = await client.post("/v1/vote", headers=headers, json=body)
-    assert second.status_code == 409
+    assert second.status_code == 409  # 1st duplicate
 
     third = await client.post("/v1/vote", headers=headers, json=body)
-    assert third.status_code == 409
+    assert third.status_code == 409  # 2nd duplicate
+
+    fourth = await client.post("/v1/vote", headers=headers, json=body)
+    assert fourth.status_code == 409  # 3rd duplicate — crosses STRIKE_THRESHOLD
 
     assert await redis.exists(_block_key(user_id, ip))
 

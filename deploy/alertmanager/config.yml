@@ -1,0 +1,38 @@
+# I-019: Alertmanager routing for deploy/prometheus/alerts.rules.yml.
+#
+# Every alert rule carries a `severity` label of `warning` or `critical`
+# (see alerts.rules.yml). This config's only job is to route those two
+# bands to two different destinations, per docs/issues/I-019-alerting.md's
+# Severity Routing decision:
+#   - warning  -> #poll-app-alerts Slack channel (no page; reviewed at
+#                 business hours or the next stand-up)
+#   - critical -> PagerDuty on-call rotation (pages immediately; 5-minute
+#                 acknowledgment SLA)
+#
+# `${PAGERDUTY_SERVICE_KEY}` is resolved by Alertmanager's own environment
+# variable substitution at deploy time — the literal string is never
+# committed. There is no on-call rotation/escalation-policy setup here;
+# that's people/process configuration explicitly out of this issue's scope.
+route:
+  group_by: ["alertname"]
+  group_wait: 30s
+  group_interval: 5m
+  repeat_interval: 4h
+  receiver: slack-poll-app-alerts
+  routes:
+    - match:
+        severity: warning
+      receiver: slack-poll-app-alerts
+    - match:
+        severity: critical
+      receiver: pagerduty-oncall
+
+receivers:
+  - name: slack-poll-app-alerts
+    slack_configs:
+      - channel: "#poll-app-alerts"
+        send_resolved: true
+  - name: pagerduty-oncall
+    pagerduty_configs:
+      - service_key: "${PAGERDUTY_SERVICE_KEY}"
+        send_resolved: true

@@ -1,0 +1,99 @@
+{
+  "title": "API SLOs",
+  "description": "I-019: latency percentiles, request rate, and error rate for the poll API, built from I-017's poll_vote_latency_seconds and poll_requests_total metrics. See docs/issues/I-019-alerting.md.",
+  "tags": ["poll-app", "slo"],
+  "timezone": "utc",
+  "schemaVersion": 39,
+  "panels": [
+    {
+      "id": 1,
+      "title": "Vote Latency (P50/P95/P99)",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 0 },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "histogram_quantile(0.5, sum(rate(poll_vote_latency_seconds_bucket[5m])) by (le))",
+          "legendFormat": "P50"
+        },
+        {
+          "refId": "B",
+          "expr": "histogram_quantile(0.95, sum(rate(poll_vote_latency_seconds_bucket[5m])) by (le))",
+          "legendFormat": "P95"
+        },
+        {
+          "refId": "C",
+          "expr": "histogram_quantile(0.99, sum(rate(poll_vote_latency_seconds_bucket[5m])) by (le))",
+          "legendFormat": "P99"
+        }
+      ],
+      "fieldConfig": { "defaults": { "unit": "s" } },
+      "thresholds": [
+        {
+          "value": 0.05,
+          "colorMode": "warning",
+          "op": "gt",
+          "label": "SLO target: P95 < 50ms"
+        },
+        {
+          "value": 0.2,
+          "colorMode": "warning",
+          "op": "gt",
+          "label": "SLO target: P99 < 200ms"
+        },
+        {
+          "value": 0.5,
+          "colorMode": "critical",
+          "op": "gt",
+          "label": "Alert threshold: P99 > 500ms pages on-call (distinct from the 200ms SLO target above)"
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "title": "Request Rate",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 8 },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(rate(poll_requests_total[5m])) by (route)",
+          "legendFormat": "{{route}}"
+        }
+      ],
+      "fieldConfig": { "defaults": { "unit": "reqps" } }
+    },
+    {
+      "id": 3,
+      "title": "Error Rate %",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 8 },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(rate(poll_requests_total{status_code=~\"5..\"}[5m])) / sum(rate(poll_requests_total[5m]))",
+          "legendFormat": "5xx error rate"
+        }
+      ],
+      "fieldConfig": { "defaults": { "unit": "percentunit" } },
+      "thresholds": [
+        { "value": 0.005, "colorMode": "warning", "op": "gt", "label": "Warning: > 0.5%" },
+        { "value": 0.01, "colorMode": "critical", "op": "gt", "label": "Critical: > 1% (spec threshold)" }
+      ]
+    },
+    {
+      "id": 4,
+      "title": "Error Breakdown by Status Code",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 16 },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(rate(poll_requests_total{status_code=~\"4..|5..\"}[5m])) by (status_code)",
+          "legendFormat": "{{status_code}}"
+        }
+      ],
+      "fieldConfig": { "defaults": { "unit": "reqps" } }
+    }
+  ]
+}

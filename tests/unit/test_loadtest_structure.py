@@ -4,7 +4,7 @@ weekly CronJob, and docs the Implementation Checklist calls for.
 Mirrors `tests/unit/test_runbooks.py`'s approach for the same reason:
 these are infra/config/doc deliverables, not business logic -- there's
 nothing for pytest to execute (running the actual scenarios needs a live
-staging environment; see docs/setup/testing.md). What's checkable by
+staging environment; see docs/setup/load-testing.md). What's checkable by
 machine is that the described project structure, manifest cross-
 references, and documentation sections actually exist and stay
 consistent with each other (e.g. the k8s worker Job's pod count matches
@@ -153,7 +153,7 @@ def test_weekly_cronjob_exists_and_is_scheduled():
 
 
 def test_testing_doc_covers_running_each_scenario_and_the_failure_runbook_mapping():
-    text = read(REPO_ROOT / "docs" / "setup" / "testing.md")
+    text = read(REPO_ROOT / "docs" / "setup" / "load-testing.md")
     for needle in (
         "sustained_peak",
         "sudden_spike",
@@ -163,7 +163,7 @@ def test_testing_doc_covers_running_each_scenario_and_the_failure_runbook_mappin
         "Do not launch",
         "docs/runbooks",
     ):
-        assert needle in text, f"docs/setup/testing.md missing {needle!r}"
+        assert needle in text, f"docs/setup/load-testing.md missing {needle!r}"
 
 
 def test_baseline_reports_directory_is_honest_about_having_no_staging_environment():

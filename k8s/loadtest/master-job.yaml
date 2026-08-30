@@ -9,7 +9,7 @@
 # `LOCUSTFILE` defaults to sustained_5x_peak.py, the scenario this whole
 # issue's Problem Statement is built around ("the single highest-named
 # risk in PROJECT_STATUS.md's risk register") -- swap it (and
-# EXPECTED_WORKERS below) per scenario; see docs/setup/testing.md.
+# EXPECTED_WORKERS below) per scenario; see docs/setup/load-testing.md.
 #
 # Deployed alongside, never on, the service under test (I-023's
 # Distributed Execution section) -- this manifest carries no

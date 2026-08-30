@@ -24,7 +24,7 @@ python -m scripts.loadtest.run_scenario sustained_peak \
 kubectl apply -f k8s/loadtest/master-job.yaml   # sudden_spike config
 kubectl apply -f k8s/loadtest/worker-job.yaml
 # then viral_single_poll and sustained_5x_peak configs in turn --
-# see docs/setup/testing.md for the full walkthrough.
+# see docs/setup/load-testing.md for the full walkthrough.
 ```
 
 This is a hard gate: per I-023's Acceptance and I-024's launch checklist,

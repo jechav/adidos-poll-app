@@ -5,7 +5,7 @@
 # (`sudden_spike`, `viral_single_poll`, `sustained_5x_peak`) are the
 # mandatory pre-launch run (Deployment Checklist item 8) and are
 # triggered manually against a provisioned staging environment per
-# docs/setup/testing.md -- they are deliberately not part of this
+# docs/setup/load-testing.md -- they are deliberately not part of this
 # recurring job, since running a 10-minute, 100-worker distributed
 # fleet every week has a real infra cost this issue's own "Out of
 # Scope" section defers ("cost/infrastructure-spend analysis ... tracked

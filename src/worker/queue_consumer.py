@@ -4,13 +4,26 @@
 worker doesn't busy-wait Redis with empty reads, while still accumulating
 100-500 votes per cycle before handing a batch off for processing —
 trading a little latency for far fewer, larger DB transactions per shard.
+
+I-018: as each vote is parsed off the queue, this re-binds the
+`request_id` the API bound for it (plus `vote_id`) and — only for
+sampled votes (`is_sampled`, deterministic by `vote_id`) — logs
+`vote_dequeued`. This is the worker side of the same trace the API's
+`vote_accepted` line started; `grep request_id=...` across both
+processes' log streams reconstructs the full lifecycle.
 """
 
 import time
 
+import structlog
+
+from src.logging.sampling import is_sampled
+from src.metrics.registry import QUEUE_LABEL_VOTES, set_queue_depth
 from src.worker.models import VotePayload
 
 QUEUE_KEY = "queue:votes"
+
+logger = structlog.get_logger("poll_app.worker")
 
 
 async def dequeue_batch(
@@ -39,5 +52,16 @@ async def dequeue_batch(
                 break
             continue
         _, raw = item
-        batch.append(VotePayload.model_validate_json(raw))
+        vote = VotePayload.model_validate_json(raw)
+        batch.append(vote)
+
+        if is_sampled(vote.vote_id):
+            with structlog.contextvars.bound_contextvars(
+                request_id=vote.request_id, vote_id=str(vote.vote_id)
+            ):
+                logger.info("vote_dequeued", poll_id=str(vote.poll_id))
+
+    # One LLEN per drained batch (not per BRPOP) is enough to keep the
+    # gauge fresh without adding a round trip to the hot per-item path.
+    set_queue_depth(QUEUE_LABEL_VOTES, await redis.llen(queue_key))
     return batch

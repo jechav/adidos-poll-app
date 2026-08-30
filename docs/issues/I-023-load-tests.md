@@ -186,7 +186,7 @@ Each run produces a timestamped report (`reports/<scenario>-<timestamp>.json`) c
 - [ ] Create Kubernetes Job manifests for Locust master + worker pods (`k8s/loadtest/`)
 - [ ] Run all 4 scenarios against staging, capture and store baseline reports in `reports/baseline/`
 - [ ] Schedule weekly recurring run (cron job or CI scheduled pipeline)
-- [ ] Document how to run each scenario locally/on-demand in `docs/setup/testing.md`
+- [ ] Document how to run each scenario locally/on-demand in `docs/setup/load-testing.md`
 
 ---
 

@@ -1,0 +1,62 @@
+# I-023: weekly load-test run (Testing Strategy: "Run weekly and before
+# launch"). Runs `sustained_peak` only -- the one scenario a single
+# process/pod can generate (1000 votes/sec) without standing up the
+# master/worker fleet in k8s/loadtest/. The higher-throughput scenarios
+# (`sudden_spike`, `viral_single_poll`, `sustained_5x_peak`) are the
+# mandatory pre-launch run (Deployment Checklist item 8) and are
+# triggered manually against a provisioned staging environment per
+# docs/setup/load-testing.md -- they are deliberately not part of this
+# recurring job, since running a 10-minute, 100-worker distributed
+# fleet every week has a real infra cost this issue's own "Out of
+# Scope" section defers ("cost/infrastructure-spend analysis ... tracked
+# separately").
+#
+# `concurrencyPolicy: Forbid` (matches reconciliation.yaml/
+# refresh-vote-counts.yaml): two overlapping load-test runs against the
+# same staging environment would contaminate each other's results.
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: loadtest-weekly
+spec:
+  schedule: "0 6 * * 1" # Monday 06:00 UTC
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 4
+  failedJobsHistoryLimit: 4
+  jobTemplate:
+    spec:
+      backoffLimit: 0
+      activeDeadlineSeconds: 300
+      template:
+        spec:
+          restartPolicy: Never
+          containers:
+            - name: loadtest-weekly
+              image: poll-app-loadtest:latest
+              command:
+                [
+                  "python",
+                  "-m",
+                  "scripts.loadtest.run_scenario",
+                  "sustained_peak",
+                  "--host",
+                  "https://staging.example.internal",
+                  "--reports-dir",
+                  "/reports",
+                ]
+              env:
+                - name: POLL_APP_LOADTEST_POLL_IDS
+                  valueFrom:
+                    configMapKeyRef:
+                      name: poll-app-loadtest-targets
+                      key: poll-ids
+              volumeMounts:
+                - name: reports
+                  mountPath: /reports
+          volumes:
+            - name: reports
+              # A real deployment should mount durable storage here
+              # (e.g. a PVC or object-storage sidecar) so week-over-week
+              # comparison survives pod rescheduling -- emptyDir is a
+              # placeholder, not a recommendation.
+              emptyDir: {}

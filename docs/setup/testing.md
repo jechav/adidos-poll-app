@@ -1,7 +1,9 @@
 # Testing
 
 Implements [I-021](../issues/I-021-unit-tests.md) (unit tests) and
-[I-022](../issues/I-022-integration-tests.md) (integration tests).
+[I-022](../issues/I-022-integration-tests.md) (integration tests). Load
+testing (I-023) is a distinct exercise against a staging environment,
+not part of this pytest suite — see [load-testing.md](./load-testing.md).
 
 ## Unit vs. integration: what's mocked, what's real
 

@@ -30,15 +30,15 @@
 - [x] [I-016: Anomaly Reporting to Adidos](./I-016-anomaly-reporting.md)
 
 ### Phase 5: Observability (Weeks 9-10)
-- [ ] [I-017: Metrics & Monitoring (Prometheus)](./I-017-monitoring.md)
-- [ ] [I-018: Structured Logging (JSON + Sampling)](./I-018-logging.md)
-- [ ] [I-019: Alerting & Dashboards (Grafana)](./I-019-alerting.md)
-- [ ] [I-020: Incident Runbooks](./I-020-runbooks.md)
+- [x] [I-017: Metrics & Monitoring (Prometheus)](./I-017-monitoring.md)
+- [x] [I-018: Structured Logging (JSON + Sampling)](./I-018-logging.md)
+- [x] [I-019: Alerting & Dashboards (Grafana)](./I-019-alerting.md)
+- [x] [I-020: Incident Runbooks](./I-020-runbooks.md)
 
 ### Phase 6: Testing & Launch (Weeks 11-12)
-- [ ] [I-021: Unit Tests (Vote, Rate Limit, Uniqueness)](./I-021-unit-tests.md)
+- [x] [I-021: Unit Tests (Vote, Rate Limit, Uniqueness)](./I-021-unit-tests.md)
 - [x] [I-022: Integration Tests (End-to-End Workflows)](./I-022-integration-tests.md)
-- [ ] [I-023: Load Tests (5x Peak: 100K votes/sec)](./I-023-load-tests.md)
+- [x] [I-023: Load Tests (5x Peak: 100K votes/sec)](./I-023-load-tests.md)
 - [ ] [I-024: Pre-Launch Checklist](./I-024-launch-checklist.md)
 
 ### Bugs / Infra

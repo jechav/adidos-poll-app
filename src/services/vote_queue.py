@@ -8,12 +8,20 @@ each entry with `VotePayload.model_validate_json` — this module's
 `VotePayload` carries one extra field (`requested_at`) that the worker's
 own `VotePayload` doesn't declare; Pydantic ignores unknown fields by
 default, so the extra field round-trips harmlessly.
+
+`request_id` (I-018) is required here: the route (`src/api/routes/user.py`)
+always has one bound in `request.state` by the time it builds this
+payload (`RequestContextMiddleware` guarantees it for every request), and
+threading it through is what lets `grep request_id=...` reconstruct one
+vote's full API-to-worker lifecycle. See `docs/architecture/logging.md`.
 """
 
 from uuid import UUID
 
 from pydantic import BaseModel
 from redis.exceptions import RedisError
+
+from src.metrics.registry import QUEUE_LABEL_VOTES, set_queue_depth
 
 QUEUE_KEY = "queue:votes"
 
@@ -24,6 +32,7 @@ class VotePayload(BaseModel):
     poll_id: UUID
     answer_id: UUID
     requested_at: str
+    request_id: str
 
 
 class VoteQueueUnavailableError(Exception):
@@ -40,6 +49,9 @@ class VoteQueueUnavailableError(Exception):
 
 async def enqueue_vote(redis, payload: VotePayload, *, queue_key: str = QUEUE_KEY) -> None:
     try:
-        await redis.lpush(queue_key, payload.model_dump_json())
+        depth = await redis.lpush(queue_key, payload.model_dump_json())
     except RedisError as exc:
         raise VoteQueueUnavailableError() from exc
+    # `LPUSH` returns the list's length post-push, so this is a live
+    # depth read with no extra round trip — I-017's `poll_queue_depth`.
+    set_queue_depth(QUEUE_LABEL_VOTES, depth)

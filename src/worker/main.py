@@ -18,16 +18,14 @@ concurrently.
 
 import argparse
 import asyncio
-import logging
 
 from src.cache.redis_client import get_redis
 from src.config import settings
+from src.logging.config import configure_logging
 from src.worker.db import ShardConnectionPool
 from src.worker.processor import process_batch, requeue
 from src.worker.queue_consumer import dequeue_batch
 from src.worker.sharding import route_by_shard
-
-logger = logging.getLogger(__name__)
 
 
 async def run_worker(
@@ -89,7 +87,10 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
 
 
 def main(argv: list[str] | None = None) -> None:
-    logging.basicConfig(level=logging.INFO)
+    # I-018: the same processor pipeline the API process configures
+    # (`src.api.app`), so log line shape is identical regardless of which
+    # process emitted it.
+    configure_logging()
     args = parse_args(argv)
     asyncio.run(run_worker(args.shard_id, args.num_shards))
 

@@ -102,7 +102,7 @@ async def test_process_batch_falls_back_to_per_row_insert_on_unique_violation(mo
     async def fake_batch_insert(conn, votes):
         raise pg_errors.UniqueViolation("duplicate")
 
-    async def fake_insert_individually(conn, votes):
+    async def fake_insert_individually(conn, votes, *, shard_id):
         # Simulate votes[1] being a duplicate that gets skipped.
         return [v for v in votes if v is not votes[1]]
 

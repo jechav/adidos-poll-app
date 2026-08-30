@@ -38,7 +38,7 @@
 ### Phase 6: Testing & Launch (Weeks 11-12)
 - [ ] [I-021: Unit Tests (Vote, Rate Limit, Uniqueness)](./I-021-unit-tests.md)
 - [ ] [I-022: Integration Tests (End-to-End Workflows)](./I-022-integration-tests.md)
-- [ ] [I-023: Load Tests (5x Peak: 100K votes/sec)](./I-023-load-tests.md)
+- [x] [I-023: Load Tests (5x Peak: 100K votes/sec)](./I-023-load-tests.md)
 - [ ] [I-024: Pre-Launch Checklist](./I-024-launch-checklist.md)
 
 ### Bugs / Infra

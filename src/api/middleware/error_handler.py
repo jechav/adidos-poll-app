@@ -1,10 +1,16 @@
 """Exception handlers that translate any raised error into the standard
 error envelope (I-003) — callers never see FastAPI/Starlette's default
 error shapes.
+
+I-018: every handler here also logs at 100%, independent of vote
+sampling — decision #15 draws a hard line between "successful votes"
+(sampled) and "errors/rejections" (always). `request_id` comes from
+`request.state.request_id`, already bound into structlog's contextvars
+by `RequestContextMiddleware` for every request, so these lines
+automatically correlate with the rest of that request's log lines.
 """
 
-import logging
-
+import structlog
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.exceptions import RequestValidationError
 from starlette.responses import JSONResponse
@@ -19,7 +25,7 @@ from src.services.uniqueness import DuplicateVoteError, UniquenessCheckUnavailab
 from src.services.vote_queue import VoteQueueUnavailableError
 from src.worker.db import ShardUnavailableError
 
-logger = logging.getLogger("poll_app.api")
+logger = structlog.get_logger("poll_app.api")
 
 _CODE_BY_STATUS = {
     401: "UNAUTHORIZED",
@@ -35,6 +41,13 @@ def _code_for_status(status_code: int) -> str:
     if status_code in _CODE_BY_STATUS:
         return _CODE_BY_STATUS[status_code]
     return "INVALID_REQUEST" if status_code < 500 else "INTERNAL_ERROR"
+
+
+def _request_id(request: Request) -> str | None:
+    # `RequestContextMiddleware` always sets this, but `getattr` keeps
+    # these handlers from ever raising on a request that somehow reached
+    # here without it (e.g. a handler exercised directly in a test).
+    return getattr(request.state, "request_id", None)
 
 
 def register_exception_handlers(app: FastAPI) -> None:
@@ -62,6 +75,12 @@ def register_exception_handlers(app: FastAPI) -> None:
         # before it was ever queued. Not wired into a live route yet —
         # I-005 will call check_and_reserve_uniqueness() and let this
         # propagate once it exists.
+        logger.info(
+            "vote_rejected",
+            request_id=_request_id(request),
+            status_code=409,
+            outcome="duplicate",
+        )
         return JSONResponse(
             status_code=409,
             content=error_envelope(
@@ -76,7 +95,12 @@ def register_exception_handlers(app: FastAPI) -> None:
         # I-006's Redis reservation check itself failed (connection
         # error, cluster down, etc.) — fail safe with 503, never fail
         # open by treating an unchecked request as "not a duplicate."
-        logger.warning("uniqueness_check_unavailable", exc_info=exc)
+        logger.warning(
+            "uniqueness_check_unavailable",
+            request_id=_request_id(request),
+            status_code=503,
+            error=str(exc),
+        )
         return JSONResponse(
             status_code=503,
             content=error_envelope(
@@ -86,6 +110,12 @@ def register_exception_handlers(app: FastAPI) -> None:
 
     @app.exception_handler(RateLimitExceededError)
     async def rate_limit_exceeded_handler(request: Request, exc: RateLimitExceededError):
+        logger.info(
+            "vote_rejected",
+            request_id=_request_id(request),
+            status_code=429,
+            outcome="rate_limited",
+        )
         return JSONResponse(
             status_code=429,
             content=error_envelope(
@@ -129,7 +159,12 @@ def register_exception_handlers(app: FastAPI) -> None:
 
     @app.exception_handler(VoteQueueUnavailableError)
     async def vote_queue_unavailable_handler(request: Request, exc: VoteQueueUnavailableError):
-        logger.warning("vote_queue_unavailable", exc_info=exc)
+        logger.warning(
+            "vote_queue_unavailable",
+            request_id=_request_id(request),
+            status_code=503,
+            error=str(exc),
+        )
         return JSONResponse(
             status_code=503,
             content=error_envelope("SERVICE_UNAVAILABLE", exc.message, request),
@@ -140,7 +175,12 @@ def register_exception_handlers(app: FastAPI) -> None:
         # I-012's read path hit the same per-shard outage I-008's writes
         # already handle with backoff — surfaced as 503, not a 500, since
         # it's an infra availability issue, not a bug.
-        logger.warning("shard_unavailable", exc_info=exc)
+        logger.warning(
+            "shard_unavailable",
+            request_id=_request_id(request),
+            status_code=503,
+            error=str(exc),
+        )
         return JSONResponse(
             status_code=503,
             content=error_envelope("SERVICE_UNAVAILABLE", str(exc), request),
@@ -162,7 +202,16 @@ def register_exception_handlers(app: FastAPI) -> None:
 
     @app.exception_handler(Exception)
     async def unhandled_exception_handler(request: Request, exc: Exception):
-        logger.exception("unhandled_exception", exc_info=exc)
+        # This is the one handler Starlette installs on `ServerErrorMiddleware`
+        # rather than `ExceptionMiddleware` (bare `Exception` is special-cased),
+        # which sits *outside* `RequestContextMiddleware` — so this is the
+        # only place an unhandled 500 is guaranteed to be logged at all.
+        logger.error(
+            "unhandled_exception",
+            request_id=_request_id(request),
+            status_code=500,
+            error=repr(exc),
+        )
         return JSONResponse(
             status_code=500,
             content=error_envelope(

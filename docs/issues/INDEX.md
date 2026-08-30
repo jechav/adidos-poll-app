@@ -31,7 +31,7 @@
 
 ### Phase 5: Observability (Weeks 9-10)
 - [x] [I-017: Metrics & Monitoring (Prometheus)](./I-017-monitoring.md)
-- [ ] [I-018: Structured Logging (JSON + Sampling)](./I-018-logging.md)
+- [x] [I-018: Structured Logging (JSON + Sampling)](./I-018-logging.md)
 - [x] [I-019: Alerting & Dashboards (Grafana)](./I-019-alerting.md)
 - [x] [I-020: Incident Runbooks](./I-020-runbooks.md)
 

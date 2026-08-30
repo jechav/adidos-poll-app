@@ -53,6 +53,7 @@ def _payload() -> VotePayload:
         poll_id=uuid.uuid4(),
         answer_id=uuid.uuid4(),
         requested_at="2026-08-22T12:00:00Z",
+        request_id="req-abc123",
     )
 
 
@@ -80,6 +81,7 @@ async def test_enqueue_vote_payload_contains_required_fields(fake_redis):
     assert parsed.poll_id == payload.poll_id
     assert parsed.answer_id == payload.answer_id
     assert parsed.requested_at == payload.requested_at
+    assert parsed.request_id == payload.request_id == "req-abc123"
 
 
 @pytest.mark.asyncio

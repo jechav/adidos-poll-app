@@ -39,6 +39,9 @@ class FakeRedis:
         self.counters[key] = self.counters.get(key, 0) + 1
         return self.counters[key]
 
+    async def llen(self, key: str) -> int:
+        return len(self.lists.get(key, []))
+
 
 class RecordingPool:
     """Fake shard connection pool: `get_connection` always "succeeds" —

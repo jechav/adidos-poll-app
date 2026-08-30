@@ -24,6 +24,7 @@ from uuid import UUID
 import psycopg
 
 from src.config import settings
+from src.metrics.registry import CACHE_LABEL_ANSWERS, record_cache_hit, record_cache_miss
 
 ANSWERS_CACHE_TTL_SECONDS = 3600
 
@@ -47,8 +48,10 @@ async def get_cached_answers(poll_id: UUID, redis) -> list[dict]:
     key = answers_cache_key(poll_id)
     cached = await redis.get(key)
     if cached is not None:
+        record_cache_hit(CACHE_LABEL_ANSWERS)
         return json.loads(cached)
 
+    record_cache_miss(CACHE_LABEL_ANSWERS)
     answers = await _load_answers_from_db(poll_id)
     await redis.set(key, json.dumps(answers), ex=ANSWERS_CACHE_TTL_SECONDS)
     return answers

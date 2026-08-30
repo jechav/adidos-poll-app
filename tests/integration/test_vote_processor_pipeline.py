@@ -17,11 +17,23 @@ import uuid
 
 import psycopg
 import pytest
+from prometheus_client import generate_latest
+from prometheus_client.parser import text_string_to_metric_families
 
+from src.metrics.registry import REGISTRY
 from src.worker.db import ShardConnectionPool
 from src.worker.models import VotePayload
 from src.worker.processor import process_batch
 from src.worker.queue_consumer import QUEUE_KEY
+
+
+def _violations_count(shard: str) -> float:
+    text = generate_latest(REGISTRY).decode("utf-8")
+    for family in text_string_to_metric_families(text):
+        for s in family.samples:
+            if s.name == "poll_db_constraint_violations_total" and s.labels.get("shard") == shard:
+                return s.value
+    return 0.0
 
 DATABASE_URL = os.environ.get("DATABASE_URL", "postgresql://postgres@localhost:5432/poll_app")
 
@@ -121,10 +133,13 @@ async def test_a_duplicate_in_the_batch_does_not_roll_back_the_rest(
         VotePayload(vote_id=uuid.uuid4(), user_id="pipeline-user-b", poll_id=poll_id, answer_id=answer_id),
     ]
 
+    before_violations = _violations_count("0")
+
     successful = await process_batch(0, votes, pool, redis)
 
     assert {v.user_id for v in successful} == {"pipeline-user-a", "pipeline-user-b"}
     assert redis.counters[f"cache:poll:{poll_id}:answer:{answer_id}"] == 2
+    assert _violations_count("0") == before_violations + 1
     with sync_conn.cursor() as cur:
         cur.execute("SELECT count(*) FROM votes WHERE poll_id = %s", (poll_id,))
         # 1 pre-existing (dup_user) + 2 newly committed.

@@ -58,8 +58,10 @@ class FakeRedis:
         self.deleted.append(key)
         return 1
 
-    async def lpush(self, key: str, value: str) -> None:
-        self.lists.setdefault(key, []).insert(0, value)
+    async def lpush(self, key: str, value: str) -> int:
+        lst = self.lists.setdefault(key, [])
+        lst.insert(0, value)
+        return len(lst)
 
     async def brpop(self, key: str, timeout: int = 1):
         lst = self.lists.get(key)
@@ -70,6 +72,9 @@ class FakeRedis:
     async def incr(self, key: str) -> int:
         self.counters[key] = self.counters.get(key, 0) + 1
         return self.counters[key]
+
+    async def llen(self, key: str) -> int:
+        return len(self.lists.get(key, []))
 
 
 class FakePool:

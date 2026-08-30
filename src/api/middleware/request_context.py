@@ -33,7 +33,7 @@ import structlog
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
 
-from src.metrics.latency import record_latency
+from src.metrics.registry import record_request
 
 logger = structlog.get_logger("poll_app.api")
 
@@ -63,8 +63,17 @@ class RequestContextMiddleware(BaseHTTPMiddleware):
             latency_ms = (time.monotonic() - start) * 1000
 
             route = request.scope.get("route")
+            # Labeled by the matched route, not the raw path, to avoid
+            # unbounded cardinality from path parameters (I-017) — a request
+            # that never matched a route (404) is labeled "unmatched" rather
+            # than leaking the arbitrary requested path into a metric label.
             route_path = route.path if route else request.url.path
-            record_latency(route_path, latency_ms)
+            record_request(
+                route=route.path if route else "unmatched",
+                method=request.method,
+                status_code=response.status_code,
+                latency_s=latency_ms / 1000,
+            )
 
             response.headers["X-Request-ID"] = request_id
 

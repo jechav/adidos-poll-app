@@ -1,0 +1,47 @@
+# I-017: hourly reconciliation of I-009's live Redis vote counters
+# against I-010's materialized/raw DB counts (user story #30), publishing
+# `poll_reconciliation_drift_max_ratio` for I-019 to alert on. See
+# docs/issues/I-017-monitoring.md, src/jobs/reconciliation.py, and
+# docs/architecture/metrics.md.
+#
+# `concurrencyPolicy: Forbid` (like refresh-vote-counts.yaml, unlike
+# report-anomalies.yaml): this job holds no lock of its own, and two
+# overlapping runs could publish the gauge out of order (the slower
+# run's stale value landing after the faster run's fresher one).
+#
+# `POLL_APP_DATABASE_URL` is the fallback DSN used by the raw-count
+# fallback's shard fan-out when no per-shard `POLL_APP_SHARD_{N}_DSN`
+# override is set (see `src/worker/db.py::default_shard_dsn`) — mirrors
+# refresh-vote-counts.yaml's identical setup for the same reason.
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: reconciliation
+spec:
+  schedule: "0 * * * *"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 1
+      activeDeadlineSeconds: 600
+      template:
+        spec:
+          restartPolicy: Never
+          containers:
+            - name: reconciliation
+              image: poll-app:latest
+              command: ["python", "-m", "src.jobs.reconciliation"]
+              env:
+                - name: POLL_APP_NUM_SHARDS
+                  value: "8"
+                - name: POLL_APP_DATABASE_URL
+                  valueFrom:
+                    secretKeyRef:
+                      name: poll-app-db
+                      key: database-url
+                - name: POLL_APP_REDIS_STARTUP_HOST
+                  value: "redis-node-1"
+                - name: POLL_APP_REDIS_STARTUP_PORT
+                  value: "7001"

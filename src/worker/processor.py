@@ -78,7 +78,7 @@ async def process_batch(
         successful = await batch_insert_votes(conn, votes)
     except pg_errors.UniqueViolation:
         try:
-            successful = await insert_votes_individually(conn, votes)
+            successful = await insert_votes_individually(conn, votes, shard_id=shard_id)
         except ShardUnavailableError:
             await pool.invalidate(shard_id)
             await requeue(redis, votes)

@@ -41,6 +41,9 @@ class FakeRedis:
         self.counters[key] = self.counters.get(key, 0) + 1
         return self.counters[key]
 
+    async def llen(self, key: str) -> int:
+        return len(self.lists.get(key, []))
+
 
 class FakeConnection:
     pass
@@ -160,7 +163,7 @@ async def test_process_batch_logs_vote_write_rejected_at_100_percent_even_when_u
     async def fake_batch_insert(conn, votes):
         raise pg_errors.UniqueViolation("duplicate")
 
-    async def fake_insert_individually(conn, votes):
+    async def fake_insert_individually(conn, votes, *, shard_id):
         return []  # every row in this batch was a duplicate
 
     monkeypatch.setattr(processor_module, "batch_insert_votes", fake_batch_insert)

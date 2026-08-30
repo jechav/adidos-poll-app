@@ -18,6 +18,7 @@ import time
 import structlog
 
 from src.logging.sampling import is_sampled
+from src.metrics.registry import QUEUE_LABEL_VOTES, set_queue_depth
 from src.worker.models import VotePayload
 
 QUEUE_KEY = "queue:votes"
@@ -59,4 +60,8 @@ async def dequeue_batch(
                 request_id=vote.request_id, vote_id=str(vote.vote_id)
             ):
                 logger.info("vote_dequeued", poll_id=str(vote.poll_id))
+
+    # One LLEN per drained batch (not per BRPOP) is enough to keep the
+    # gauge fresh without adding a round trip to the hot per-item path.
+    set_queue_depth(QUEUE_LABEL_VOTES, await redis.llen(queue_key))
     return batch

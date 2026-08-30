@@ -1,0 +1,79 @@
+# I-023: Locust master for a distributed load-test run.
+#
+# One master coordinates N worker pods (worker-job.yaml) to generate
+# more req/sec than a single process can produce -- required for the
+# `sudden_spike` (10K/sec), `viral_single_poll` (50K/sec), and
+# `sustained_5x_peak` (100K/sec) scenarios; `sustained_peak` (1K/sec)
+# can run single-process via scripts/loadtest/run_scenario.py instead.
+#
+# `LOCUSTFILE` defaults to sustained_5x_peak.py, the scenario this whole
+# issue's Problem Statement is built around ("the single highest-named
+# risk in PROJECT_STATUS.md's risk register") -- swap it (and
+# EXPECTED_WORKERS below) per scenario; see docs/setup/testing.md.
+#
+# Deployed alongside, never on, the service under test (I-023's
+# Distributed Execution section) -- this manifest carries no
+# affinity/anti-affinity to the app's own pods because it's expected to
+# run in a separate load-test namespace entirely, not just a separate
+# node.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: locust-master
+  labels:
+    app: locust-master
+spec:
+  backoffLimit: 0
+  template:
+    metadata:
+      labels:
+        app: locust-master
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: locust-master
+          image: poll-app-loadtest:latest
+          args:
+            - "-f"
+            - "$(LOCUSTFILE)"
+            - "--master"
+            - "--headless"
+            - "--host"
+            - "$(TARGET_HOST)"
+            - "--expect-workers"
+            - "$(EXPECTED_WORKERS)"
+            - "--csv"
+            - "/reports/$(SCENARIO_NAME)"
+          env:
+            - name: LOCUSTFILE
+              value: "loadtest/scenarios/sustained_5x_peak.py"
+            - name: SCENARIO_NAME
+              value: "sustained_5x_peak"
+            - name: TARGET_HOST
+              value: "https://staging.example.internal"
+            # Start at 1 worker per ~1K req/sec of target load (I-023's
+            # Distributed Execution note) and adjust from empirical
+            # per-worker throughput once measured against staging.
+            - name: EXPECTED_WORKERS
+              value: "100"
+            - name: POLL_APP_LOADTEST_POLL_IDS
+              valueFrom:
+                configMapKeyRef:
+                  name: poll-app-loadtest-targets
+                  key: poll-ids
+          ports:
+            - containerPort: 5557 # worker<->master RPC
+            - containerPort: 8089 # web UI (unused in --headless mode)
+          volumeMounts:
+            - name: reports
+              mountPath: /reports
+          resources:
+            requests:
+              cpu: "500m"
+              memory: "512Mi"
+            limits:
+              cpu: "1"
+              memory: "1Gi"
+      volumes:
+        - name: reports
+          emptyDir: {}

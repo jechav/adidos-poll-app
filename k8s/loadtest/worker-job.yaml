@@ -1,0 +1,60 @@
+# I-023: Locust worker fleet for a distributed load-test run.
+#
+# `parallelism` is the actual worker-pod count -- keep it equal to
+# master-job.yaml's `EXPECTED_WORKERS` (the master refuses to start
+# until exactly that many workers have connected). See
+# master-job.yaml's header comment for scenario/count swapping.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: locust-worker
+  labels:
+    app: locust-worker
+spec:
+  # Must match master-job.yaml's EXPECTED_WORKERS.
+  parallelism: 100
+  completions: 100
+  backoffLimit: 0
+  template:
+    metadata:
+      labels:
+        app: locust-worker
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: locust-worker
+          image: poll-app-loadtest:latest
+          args:
+            - "-f"
+            - "$(LOCUSTFILE)"
+            - "--worker"
+            - "--master-host"
+            - "locust-master"
+          env:
+            - name: LOCUSTFILE
+              value: "loadtest/scenarios/sustained_5x_peak.py"
+            - name: POLL_APP_LOADTEST_POLL_IDS
+              valueFrom:
+                configMapKeyRef:
+                  name: poll-app-loadtest-targets
+                  key: poll-ids
+          resources:
+            requests:
+              cpu: "250m"
+              memory: "256Mi"
+            limits:
+              cpu: "500m"
+              memory: "512Mi"
+---
+# Headless service so worker pods can resolve `locust-master` by name.
+apiVersion: v1
+kind: Service
+metadata:
+  name: locust-master
+spec:
+  clusterIP: None
+  selector:
+    app: locust-master
+  ports:
+    - name: rpc
+      port: 5557

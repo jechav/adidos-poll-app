@@ -17,6 +17,7 @@ single Postgres shard `user.user_id` hashes to.
 from typing import Literal
 from uuid import uuid4
 
+import structlog
 from fastapi import APIRouter, Depends, Query, Request, status
 from redis.asyncio.cluster import RedisCluster
 from redis.exceptions import RedisClusterException, RedisError
@@ -25,6 +26,7 @@ from src.api.dependencies.auth import get_current_user
 from src.cache.redis_client import redis_dependency
 from src.db.queries.polls import fetch_polls_page, fetch_vote_counts_fallback
 from src.db.queries.user_votes import get_user_votes
+from src.logging.sampling import is_sampled
 from src.schemas.polls import Pagination as PollPagination
 from src.schemas.polls import PollListData, PollSummary, _format_ts
 from src.schemas.responses import now_iso, success_envelope
@@ -43,6 +45,8 @@ from src.services.uniqueness import (
     release_reservation,
 )
 from src.services.vote_queue import VotePayload, VoteQueueUnavailableError, enqueue_vote
+
+logger = structlog.get_logger("poll_app.api")
 
 router = APIRouter(prefix="/v1", tags=["user"])
 
@@ -144,6 +148,10 @@ async def cast_vote(
         poll_id=vote.poll_id,
         answer_id=vote.answer_id,
         requested_at=now_iso(),
+        # I-018: thread the same request_id RequestContextMiddleware
+        # bound for this request into the queued payload, so the worker
+        # (I-008) can re-bind it on dequeue and continue the same trace.
+        request_id=request.state.request_id,
     )
     try:
         await enqueue_vote(redis, payload)
@@ -153,6 +161,16 @@ async def cast_vote(
         # attempting and what trade-off it accepts.
         await release_reservation(redis, user.user_id, vote.poll_id)
         raise
+
+    if is_sampled(payload.vote_id):
+        logger.info(
+            "vote_accepted",
+            vote_id=str(payload.vote_id),
+            user_id=user.user_id,
+            poll_id=str(vote.poll_id),
+            answer_id=str(vote.answer_id),
+            outcome="success",
+        )
 
     return success_envelope(
         {"status": "queued", "poll_id": str(vote.poll_id), "answer_id": str(vote.answer_id)},

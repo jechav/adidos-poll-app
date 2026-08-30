@@ -2,8 +2,10 @@
 
 Implements [I-021](../issues/I-021-unit-tests.md) (unit tests) and
 covers the `tests/unit/` layer specifically; `tests/integration/`
-(I-022) and `tests/load/` (I-023) are separate suites with their own
-infrastructure requirements, noted below.
+(I-022) is a separate suite with its own infrastructure requirements,
+noted below. Load testing (I-023) is a distinct exercise against a
+staging environment, not part of this pytest suite — see
+[load-testing.md](./load-testing.md).
 
 ## Unit tests (`tests/unit/`)
 

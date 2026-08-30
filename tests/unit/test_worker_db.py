@@ -5,10 +5,31 @@ being hot-looped. All against a monkeypatched `psycopg.AsyncConnection.connect`
 for the real-DB round-trip tests).
 """
 
+import uuid
+
 import psycopg
 import pytest
+from prometheus_client import generate_latest
+from prometheus_client.parser import text_string_to_metric_families
+from psycopg import errors as pg_errors
 
-from src.worker.db import ShardConnectionPool, ShardUnavailableError, default_shard_dsn
+from src.metrics.registry import REGISTRY
+from src.worker.db import (
+    ShardConnectionPool,
+    ShardUnavailableError,
+    default_shard_dsn,
+    insert_votes_individually,
+)
+from src.worker.models import VotePayload
+
+
+def _violations_count(shard: str) -> float:
+    text = generate_latest(REGISTRY).decode("utf-8")
+    for family in text_string_to_metric_families(text):
+        for s in family.samples:
+            if s.name == "poll_db_constraint_violations_total" and s.labels.get("shard") == shard:
+                return s.value
+    return 0.0
 
 
 class FakeClock:
@@ -181,3 +202,82 @@ def test_default_shard_dsn_falls_back_to_settings_database_url(monkeypatch):
 def test_default_shard_dsn_prefers_per_shard_override(monkeypatch):
     monkeypatch.setenv("POLL_APP_SHARD_3_DSN", "postgresql://shard-3.internal/poll_app")
     assert default_shard_dsn(3) == "postgresql://shard-3.internal/poll_app"
+
+
+def _vote(user_id: str = "user-1") -> VotePayload:
+    return VotePayload(
+        vote_id=uuid.uuid4(), user_id=user_id, poll_id=uuid.uuid4(), answer_id=uuid.uuid4()
+    )
+
+
+class FakeCursor:
+    def __init__(self, conn):
+        self._conn = conn
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, *exc):
+        return False
+
+    async def execute(self, sql, params):
+        user_id = params[1]
+        if user_id in self._conn.duplicate_user_ids:
+            raise pg_errors.UniqueViolation("duplicate key value")
+        self._conn.committed_user_ids.append(user_id)
+
+
+class FakeInsertConn:
+    """Fake connection exercising `insert_votes_individually`'s real
+    per-row commit/rollback control flow (unlike test_worker_processor.py's
+    fakes, which monkeypatch this function out entirely) — a chosen subset
+    of `user_id`s raise `UniqueViolation` on `execute`, mirroring a real
+    unique-constraint rejection.
+    """
+
+    def __init__(self, duplicate_user_ids: set[str]):
+        self.duplicate_user_ids = duplicate_user_ids
+        self.committed_user_ids: list[str] = []
+        self.rollback_count = 0
+
+    def cursor(self):
+        return FakeCursor(self)
+
+    async def commit(self):
+        pass
+
+    async def rollback(self):
+        self.rollback_count += 1
+
+
+@pytest.mark.asyncio
+async def test_insert_votes_individually_skips_duplicates_and_commits_the_rest():
+    votes = [_vote("user-1"), _vote("user-2"), _vote("user-3")]
+    conn = FakeInsertConn(duplicate_user_ids={"user-2"})
+
+    successful = await insert_votes_individually(conn, votes, shard_id=0)
+
+    assert {v.user_id for v in successful} == {"user-1", "user-3"}
+    assert conn.rollback_count == 1
+
+
+@pytest.mark.asyncio
+async def test_insert_votes_individually_increments_the_constraint_violation_counter():
+    votes = [_vote("user-1"), _vote("user-2")]
+    conn = FakeInsertConn(duplicate_user_ids={"user-2"})
+    before = _violations_count("4")
+
+    await insert_votes_individually(conn, votes, shard_id=4)
+
+    assert _violations_count("4") == before + 1
+
+
+@pytest.mark.asyncio
+async def test_insert_votes_individually_does_not_increment_the_counter_when_nothing_duplicates():
+    votes = [_vote("user-1"), _vote("user-2")]
+    conn = FakeInsertConn(duplicate_user_ids=set())
+    before = _violations_count("5")
+
+    await insert_votes_individually(conn, votes, shard_id=5)
+
+    assert _violations_count("5") == before

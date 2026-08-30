@@ -1,0 +1,162 @@
+# I-019: Alertmanager rules for I-017's six observability signals.
+#
+# Every signal gets two bands (labels.severity: warning | critical),
+# routed by deploy/alertmanager/config.yml. The critical threshold is
+# always the exact number SPECIFICATION.md's Implementation Decision #15
+# and Deployment Checklist item 6 name; the warning band is a tighter
+# margin chosen to give on-call advance notice before a metric crosses
+# into spec-defined-incident territory. See
+# docs/issues/I-019-alerting.md's "Alert Rules: Warning vs. Critical
+# Bands" table for the full rationale per signal, and
+# docs/architecture/metrics.md for where each underlying metric comes
+# from (I-017).
+#
+# `promtool check rules` / `promtool test rules` aren't run here --
+# there's no Prometheus binary in this Python-only repo/CI image --
+# tests/unit/test_alert_rules.py validates this file's structure and
+# thresholds with PyYAML instead. See that file's module docstring.
+groups:
+  - name: poll-app-queue
+    rules:
+      - alert: PollQueueDepthWarning
+        expr: poll_queue_depth > 5000
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Queue depth above 5,000 -- autoscaling may not be keeping up"
+          runbook_url: "docs/runbooks/queue-backlog.md"
+      - alert: PollQueueDepthCritical
+        expr: poll_queue_depth > 10000
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Queue depth above 10,000 (spec threshold) -- votes at risk of delayed processing"
+          runbook_url: "docs/runbooks/queue-backlog.md"
+
+  - name: poll-app-error-rate
+    rules:
+      - alert: PollErrorRateWarning
+        expr: >-
+          sum(rate(poll_requests_total{status_code=~"5.."}[5m]))
+          /
+          sum(rate(poll_requests_total[5m]))
+          > 0.005
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "5xx error rate above 0.5%"
+          runbook_url: "docs/runbooks/db-bottleneck.md"
+      - alert: PollErrorRateCritical
+        expr: >-
+          sum(rate(poll_requests_total{status_code=~"5.."}[5m]))
+          /
+          sum(rate(poll_requests_total[5m]))
+          > 0.01
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "5xx error rate above 1% (spec threshold)"
+          runbook_url: "docs/runbooks/db-bottleneck.md"
+
+  - name: poll-app-redis-hit-rate
+    rules:
+      - alert: PollRedisHitRateWarning
+        expr: >-
+          sum(rate(poll_redis_cache_hits_total[5m]))
+          /
+          (sum(rate(poll_redis_cache_hits_total[5m])) + sum(rate(poll_redis_cache_misses_total[5m])))
+          < 0.97
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Redis cache hit rate below 97%"
+          runbook_url: "docs/runbooks/redis-down.md"
+      - alert: PollRedisHitRateCritical
+        expr: >-
+          sum(rate(poll_redis_cache_hits_total[5m]))
+          /
+          (sum(rate(poll_redis_cache_hits_total[5m])) + sum(rate(poll_redis_cache_misses_total[5m])))
+          < 0.95
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Redis cache hit rate below 95% (spec threshold)"
+          runbook_url: "docs/runbooks/redis-down.md"
+
+  - name: poll-app-reconciliation
+    rules:
+      # No `for` clause: the reconciliation job (src/jobs/reconciliation.py)
+      # runs once/hour and publishes one gauge sample per run -- `for`
+      # requires the condition to hold across repeated evaluations, which
+      # doesn't apply to a value that only changes hourly.
+      - alert: PollReconciliationDriftWarning
+        expr: poll_reconciliation_drift_max_ratio > 0.005
+        labels:
+          severity: warning
+        annotations:
+          summary: "Reconciliation drift above 0.5% on the latest hourly run"
+          runbook_url: "docs/runbooks/db-bottleneck.md"
+      - alert: PollReconciliationDriftCritical
+        expr: poll_reconciliation_drift_max_ratio > 0.01
+        labels:
+          severity: critical
+        annotations:
+          summary: "Reconciliation drift above 1% (spec threshold) on the latest hourly run"
+          runbook_url: "docs/runbooks/db-bottleneck.md"
+
+  - name: poll-app-latency
+    rules:
+      # P99 > 200ms is the SLO *target* being missed (SPECIFICATION.md
+      # Performance success criteria / user story #9) -- not the same
+      # number as the 500ms spec alerting trigger below. Kept as two
+      # separately-worded alerts so a fired page never reads as the other.
+      - alert: PollP99LatencyWarning
+        expr: histogram_quantile(0.99, sum(rate(poll_vote_latency_seconds_bucket[5m])) by (le)) > 0.2
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "P99 vote latency above 200ms -- SLO target missed (not the 500ms alert threshold)"
+          runbook_url: "docs/runbooks/db-bottleneck.md"
+      - alert: PollP99LatencyCritical
+        expr: histogram_quantile(0.99, sum(rate(poll_vote_latency_seconds_bucket[5m])) by (le)) > 0.5
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "P99 vote latency above 500ms -- spec alerting threshold breached (distinct from the 200ms SLO target)"
+          runbook_url: "docs/runbooks/db-bottleneck.md"
+
+  - name: poll-app-db-constraint-violations
+    rules:
+      # Per I-006/I-008, a small number of races (client retries hitting
+      # an already-processed vote) are expected and non-incident. The
+      # literal spec wording ("> 0 anomalies/min") is treated as warning
+      # (visibility, not paging) and fires on any occurrence in the last
+      # minute -- no `for`, since a single-minute increase check already
+      # is the "sustained" window; requiring it to hold across repeated
+      # evaluations would just delay visibility of a real one-off spike.
+      - alert: PollDbConstraintViolationsWarning
+        expr: increase(poll_db_constraint_violations_total[1m]) > 0
+        labels:
+          severity: warning
+        annotations:
+          summary: "Database unique-constraint violation observed (expected at low volume; see I-006)"
+          runbook_url: "docs/runbooks/bot-attack.md"
+      # Sustained volume (> 5/min for 5m) suggests the Redis SET NX
+      # uniqueness layer (I-006) is failing to catch duplicates before
+      # they reach the queue -- promoted to critical.
+      - alert: PollDbConstraintViolationsCritical
+        expr: rate(poll_db_constraint_violations_total[5m]) * 60 > 5
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Database unique-constraint violations sustained above 5/min -- possible uniqueness-layer failure"
+          runbook_url: "docs/runbooks/bot-attack.md"

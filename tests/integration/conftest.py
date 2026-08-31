@@ -330,12 +330,17 @@ class FakeRedis:
         self.lists: dict[str, list[str]] = {}
         self.counters: dict[str, int] = {}
 
-    async def lpush(self, key: str, value: str) -> None:
-        self.lists.setdefault(key, []).insert(0, value)
+    async def lpush(self, key: str, value: str) -> int:
+        lst = self.lists.setdefault(key, [])
+        lst.insert(0, value)
+        return len(lst)
 
     async def incr(self, key: str) -> int:
         self.counters[key] = self.counters.get(key, 0) + 1
         return self.counters[key]
+
+    async def llen(self, key: str) -> int:
+        return len(self.lists.get(key, []))
 
     async def brpop(self, key: str, timeout: float = 0):
         """Non-blocking stand-in for `BRPOP`: an empty list returns `None`

@@ -34,10 +34,25 @@ jobs:
       - name: Start Postgres + Redis Cluster
         run: docker compose up -d postgres redis-node-1 redis-node-2 redis-node-3 redis-cluster-init
 
+      # A single `pg_isready` pass isn't enough: on a fresh (empty)
+      # volume the postgres image's entrypoint briefly starts an
+      # internal, Unix-socket-only server to run initdb before
+      # restarting as the real server, and `pg_isready` can catch that
+      # temporary server in its narrow "accepting connections" window
+      # right before it shuts down for the restart -- passing the wait
+      # a beat too early and failing the very next command
+      # ("the database system is shutting down"). Requiring 3
+      # consecutive passes is enough to skip past that window.
       - name: Wait for Postgres
         run: |
-          for i in $(seq 1 30); do
-            docker compose exec -T postgres pg_isready -U poll_app -d poll_app && break
+          consecutive=0
+          for i in $(seq 1 60); do
+            if docker compose exec -T postgres pg_isready -U poll_app -d poll_app; then
+              consecutive=$((consecutive + 1))
+              [ "$consecutive" -ge 3 ] && break
+            else
+              consecutive=0
+            fi
             sleep 1
           done
 
